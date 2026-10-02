@@ -12,6 +12,7 @@ const directory = mkdtempSync(join(tmpdir(), "eve-packaged-"));
 let app;
 const checks = [];
 try {
+  console.log("Launching packaged EVE Trader");
   if (process.platform === "darwin") {
     execFileSync(
       "/usr/bin/codesign",
@@ -38,10 +39,16 @@ try {
       timeout: 30000,
     });
   app = await launch();
+  console.log("Packaged app launched; waiting for its first window");
   let page = await app.firstWindow();
+  console.log("First window opened; waiting for the market tab");
   await page.getByRole("tab", { name: "Рынок", exact: true }).waitFor();
+  console.log("Market tab opened; requesting initial engine state");
   const state = await page.evaluate(() =>
     window.eve.request({ kind: "state" }),
+  );
+  console.log(
+    `Initial state returned: ${state.opportunities.length} opportunities`,
   );
   if (state.characters.length !== 3 || !state.opportunities.length)
     throw Error("Packaged SQLite/worker did not load DEMO");
@@ -53,6 +60,7 @@ try {
       value: { ...s.settings, minProfit: "123456" },
     });
   });
+  console.log("Settings persisted; checking tray and restart behavior");
   checks.push("settings write");
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].close(),
@@ -69,6 +77,7 @@ try {
   checks.push("hide to tray + show");
   await app.close();
   app = await launch();
+  console.log("Restarted packaged app; checking saved settings");
   page = await app.firstWindow();
   await page.getByRole("tab", { name: "Рынок", exact: true }).waitFor();
   const restarted = await page.evaluate(() =>

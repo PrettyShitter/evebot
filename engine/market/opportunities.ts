@@ -251,7 +251,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
         fee: ReturnType<typeof rates>;
         target: string;
         sellRate: Decimal;
-        sortedAsks: Level[];
+        sortedAsks?: Level[];
       } | null
     >();
     const minimumReturn = D(1).plus(
@@ -266,6 +266,11 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
         0,
       );
       const requiredNetPrice = lowest.mul(minimumReturn);
+      const maxLot = Math.min(
+        cargoLimit,
+        sourceQuantity,
+        Decimal.max(0, allowance.div(lowest).floor()).toNumber(),
+      );
       for (const destinationId of destinations) {
         if (sourceId === destinationId) continue;
         const destination = stations.get(destinationId)!;
@@ -301,9 +306,6 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
               ? tickBelow(bestAsk.toFixed())
               : bestBid.toFixed(),
             sellRate,
-            sortedAsks: [...targetAsks].sort((a, b) =>
-              D(a.price).comparedTo(b.price),
-            ),
           };
           termsByDestination.set(destinationId, terms);
         }
@@ -316,7 +318,6 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           target,
           sellRate,
           demandQuantity,
-          sortedAsks,
         } = terms;
         let buyPossible = bestBid
           .mul(D(1).minus(fee.tax))
@@ -327,11 +328,6 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
         // Bound the best possible gross profit before depth walks, history reads,
         // and liquidity scoring. These bounds intentionally use the cheapest
         // ask and best bid, so pruning cannot hide a qualifying candidate.
-        const maxLot = Math.min(
-          cargoLimit,
-          sourceQuantity,
-          Decimal.max(0, allowance.div(lowest).floor()).toNumber(),
-        );
         if (buyPossible) {
           const buyQty = Math.min(maxLot, demandQuantity);
           const maximumBuyProfit = bestBid
@@ -404,6 +400,9 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
             : 0;
         let quantity = Math.min(cargoLimit, Math.max(buyQ, sellQ));
         if (quantity <= 0) continue;
+        const sortedAsks = (terms.sortedAsks ??= [...targetAsks].sort((a, b) =>
+          D(a.price).comparedTo(b.price),
+        ));
         const base = {
           id: [typeId, sourceId, destinationId].join(":"),
           type,
