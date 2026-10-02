@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-02T10:32:45.762Z",
+  "status": "PASS",
+  "from": "0.1.2",
+  "to": "0.1.3",
+  "source": "GitHub Releases",
+  "checks": [
+    "signed metadata",
+    "archive size and SHA-512",
+    "UI download and install",
+    "SQLite backup",
+    "helper restart health",
+    "version changed",
+    "settings, deal and reserves preserved",
+    "latest version check"
+  ]
+}

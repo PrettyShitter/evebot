@@ -1,5 +1,11 @@
 name: Verify and package
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
 jobs:
   verify:
     strategy:
@@ -30,6 +36,7 @@ jobs:
           name: eve-trader-${{ runner.os }}
           path: |
             release/*.dmg
+            release/*.zip
             release/*.exe
             docs/verification/
             playwright-report/
