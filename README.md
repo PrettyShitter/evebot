@@ -2,7 +2,7 @@
 
 Локальное desktop-приложение для поиска торговли между NPC-станциями в пределах трёх обычных прыжков от Jita, Amarr и Dodixie. Рабочая первая версия: рынок, расчёты, корзина, маршруты, три кошелька, FIFO и сверка фактических расходов.
 
-**Текущий статус: macOS arm64 build и deterministic-проверки есть; live SSO пользователя и Windows не проверены. Полную производственную готовность по ТЗ не заявляем.** Приложение ничего не покупает и не продаёт в EVE.
+**Текущий статус: macOS/Windows сборки и автоматические проверки проходят; live SSO пользователя ещё не проверен. Полную производственную готовность по ТЗ не заявляем.** Приложение ничего не покупает и не продаёт в EVE.
 
 ## Запуск
 
@@ -34,7 +34,7 @@ pnpm dist:mac
 node scripts/packaged-smoke.mjs
 ```
 
-Windows: `pnpm dist:win` на Windows runner; pipeline [.github/workflows/verify.yml](.github/workflows/verify.yml) подготовлен, но в этой сессии не запускался.
+Windows: `pnpm dist:win` на Windows runner; сборка и запуск упакованного приложения прошли [GitHub Actions](https://github.com/PrettyShitter/evebot/actions/runs/36995923836). Установка Windows-обновления ещё не проверена.
 
 ## Документы
 

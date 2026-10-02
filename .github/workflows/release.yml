@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release:
+    timeout-minutes: 20
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -36,6 +37,7 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       - run: node scripts/packaged-smoke.mjs
+        timeout-minutes: 3
       - run: pnpm release:sign
         env:
           EVE_UPDATE_PRIVATE_KEY: ${{ secrets.EVE_UPDATE_PRIVATE_KEY }}

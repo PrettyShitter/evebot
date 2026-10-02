@@ -6,6 +6,8 @@ PASS: lint, typecheck, 27 unit + 22 integration теста, build и 3 Electron 
 
 Apple Developer ID/notarization отсутствуют; Ed25519 — подпись проекта. Первый запуск загруженного DMG через Gatekeeper на отдельном Mac не проверен. Windows in-app update и пользовательский SSO остаются непроверенными.
 
+GitHub Actions для тега v0.1.3: [оба runner прошли проверки, сборку и packaged smoke](https://github.com/PrettyShitter/evebot/actions/runs/36995923836), macOS arm64 и Windows x64. Дублирующий прогон того же коммита по push main остановлен после зависания macOS smoke; в workflow добавлены ограничения времени. Это ограничение стабильности CI; успешный прогон тега и локальная проверка обновления зафиксированы отдельно.
+
 # Обновление 0.1.1 — радиус 3 прыжка
 
 PASS: lint, typecheck, 22 unit + 20 integration тестов, build и 3 Electron E2E. Отдельный performance-сценарий не повторялся; измерения ниже относятся к 0.1.0. Проверены включение третьего/исключение четвёртого прыжка, переход существующей пяти-прыжковой базы и сохранность сделок. Текущий размер зоны: 159 систем, 637 станций, 11 регионов. Логи: [radius-3](docs/verification/stage-radius-3.md). Упаковка: [stage-10](docs/verification/stage-10.md).
