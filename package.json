@@ -1,0 +1,118 @@
+{
+  "name": "eve-trader",
+  "version": "0.1.3",
+  "private": true,
+  "description": "Локальный помощник межстанционной торговли EVE Online",
+  "author": "EVE Trader",
+  "license": "UNLICENSED",
+  "type": "module",
+  "main": "dist/desktop/main.cjs",
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "verify:stage": "node scripts/verify-stage.mjs",
+    "verify:all": "node scripts/verify-stage.mjs all",
+    "build": "node scripts/build.mjs",
+    "dist:mac": "pnpm build && electron-builder --mac dmg zip --arm64 --publish never",
+    "dist:win": "pnpm build && electron-builder --win nsis --x64 --publish never",
+    "release:sign": "node scripts/sign-update.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.23",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@tanstack/react-table": "9.2.4",
+    "@tanstack/react-virtual": "3.14.13",
+    "better-sqlite3": "13.0.3",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "decimal.js": "10.6.0",
+    "drizzle-orm": "0.45.3",
+    "electron-updater": "6.8.9",
+    "fflate": "0.8.3",
+    "jose": "6.2.12",
+    "lossless-json": "4.3.1",
+    "lucide-react": "1.49.0",
+    "radix-ui": "1.6.7",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "3.7.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.6.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "fast-check": "4.10.2",
+    "prettier": "3.9.9",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.71.0",
+    "vite": "8.3.2",
+    "vitest": "5.0.3"
+  },
+  "build": {
+    "appId": "local.eve.trader",
+    "productName": "EVE Trader",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "db/migrations/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.finance",
+      "identity": null,
+      "icon": "resources/icon.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "artifactName": "EVE-Trader-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "PrettyShitter",
+        "repo": "evebot",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

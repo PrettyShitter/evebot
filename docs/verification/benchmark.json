@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-02T09:32:19.290Z",
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "cpu": "Apple M5",
+    "ramGiB": 24
+  },
+  "dataset": {
+    "file": ".cache/the-forge-orders.json",
+    "region": "10000002",
+    "orders": 404495,
+    "snapshot": [
+      {
+        "region": "10000002",
+        "id": "1fa2cc0c-60e2-4a6c-a483-c1827f797d4a",
+        "expiresAt": "2026-10-02T09:30:04.000Z",
+        "modifiedAt": "Fri, 02 Oct 2026 09:25:04 GMT"
+      }
+    ]
+  },
+  "zoneStations": 1516,
+  "types": 19565,
+  "offers": 765,
+  "scanMs": 2602.1533750000003,
+  "filterMs": 8.525542000000314,
+  "rssMiB": 1019.203125,
+  "peakRssMiB": 1058.828125,
+  "scope": "One complete real regional snapshot, buy analysis; no fabricated regional history. Synthetic seller level 5 and 800m ISK budget. Filter benchmark recomputes quantity, fees and ROI against prepared ladders; renderer latency measured separately."
+}

@@ -1,0 +1,146 @@
+import { it, expect } from "vitest";
+import { Store } from "../../db/store";
+import { resolve } from "node:path";
+import { EsiClient } from "../../engine/esi/client";
+import { syncRegion, latestOrders } from "../../engine/market/snapshots";
+import { Scheduler } from "../../engine/esi/scheduler";
+import { summarize } from "../../engine/history/history";
+const order = (id: number) => ({
+  order_id: id,
+  type_id: 34,
+  location_id: 60003760,
+  system_id: 30000142,
+  price: 1.23,
+  is_buy_order: false,
+  volume_remain: 10,
+  volume_total: 10,
+  min_volume: 1,
+  range: "region",
+  duration: 90,
+  issued: "2026-10-02T00:00:00Z",
+});
+it("stage 3: atomic generations, failed page leaves previous data intact", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  let fail = false;
+  let clock = 0;
+  const client = new EsiClient(
+    async (input) => {
+      const page = new URL(String(input)).searchParams.get("page");
+      if (fail && page === "2") return new Response("", { status: 503 });
+      return new Response(JSON.stringify([order(page === "1" ? 1 : 2)]), {
+        headers: {
+          "X-Pages": "2",
+          "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+          "Cache-Control": "max-age=1",
+        },
+      });
+    },
+    () => clock,
+  );
+  try {
+    await syncRegion(s, client, "1", () => clock);
+    expect(latestOrders(s, ["1"]).orders).toHaveLength(2);
+    clock = 2000;
+    fail = true;
+    await expect(syncRegion(s, client, "1", () => clock)).rejects.toThrow();
+    expect(latestOrders(s, ["1"]).orders).toHaveLength(2);
+    expect(latestOrders(s, ["1", "2"]).complete).toBe(false);
+  } finally {
+    s.close();
+  }
+});
+it("cache expiry, 304 no new content, rate limit retry header", async () => {
+  let now = 0,
+    calls = 0;
+  const client = new EsiClient(
+    async () => {
+      calls++;
+      if (calls === 3)
+        return new Response("", {
+          status: 429,
+          headers: { "Retry-After": "30" },
+        });
+      return calls === 1
+        ? new Response("[1]", {
+            headers: { ETag: "x", "Cache-Control": "max-age=10" },
+          })
+        : new Response(null, {
+            status: 304,
+            headers: { "Cache-Control": "max-age=10" },
+          });
+    },
+    () => now,
+  );
+  const a = await client.get("/status");
+  expect(await client.get("/status")).toBe(a);
+  expect(calls).toBe(1);
+  now = 11000;
+  expect((await client.get("/status")).body).toEqual(["1"]);
+  now = 22000;
+  await expect(client.get("/status")).rejects.toMatchObject({
+    status: 429,
+    retryAt: 52000,
+  });
+  await expect(client.get("/other")).rejects.toMatchObject({ status: 429 });
+  expect(calls).toBe(3);
+});
+it("scheduler priorities, bounded concurrency, jittered resume and finite retries", async () => {
+  let now = 0;
+  const seen: string[] = [];
+  const q = new Scheduler(
+    () => now,
+    () => 0,
+    1,
+  );
+  q.schedule("history", 4, 0, async () => {
+    seen.push("history");
+    return 10000;
+  });
+  q.schedule("wallet", 0, 0, async () => {
+    seen.push("wallet");
+    return 10000;
+  });
+  await q.tick();
+  expect(seen).toEqual(["wallet"]);
+  q.suspend();
+  await q.tick();
+  expect(seen).toHaveLength(1);
+  q.resume();
+  await q.tick();
+  expect(seen).toEqual(["wallet", "history"]);
+  const retries = new Scheduler(
+    () => now,
+    () => 0,
+    1,
+  );
+  let attempts = 0;
+  retries.schedule("broken", 0, 0, async () => {
+    attempts++;
+    throw Error("503");
+  });
+  for (let i = 0; i < 5; i++) {
+    now += 400000;
+    await retries.tick();
+  }
+  expect(attempts).toBe(5);
+  expect(retries.status.some((j) => j.key === "broken")).toBe(false);
+});
+it("history missing is unknown and observed days are not fabricated", () => {
+  expect(summarize([], 30, "2026-10-02T00:00:00Z")).toBeNull();
+  const r = summarize(
+    [
+      {
+        date: "2026-10-01",
+        volume: 10,
+        order_count: 2,
+        average: "20",
+        lowest: "19",
+        highest: "21",
+      },
+    ],
+    7,
+    "2026-10-02T00:00:00Z",
+  );
+  expect(r?.missingDays).toBe(6);
+  expect(r?.medianDailyVolume).toBe("10");
+});

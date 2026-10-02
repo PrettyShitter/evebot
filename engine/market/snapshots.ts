@@ -1,0 +1,162 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import type { Store } from "../../db/store";
+import { EsiClient } from "../esi/client";
+import { orderSchema, type Order } from "../../shared/contracts/esi";
+export async function syncRegion(
+  store: Store,
+  client: EsiClient,
+  region: string,
+  clock: () => number = Date.now,
+) {
+  const id = randomUUID(),
+    start = new Date(clock()).toISOString();
+  store.sql
+    .prepare("INSERT INTO market_snapshot_runs VALUES (?,?,?,?,?,?,?,?)")
+    .run(id, region, start, null, null, null, "loading", 0);
+  try {
+    const first = await client.get(
+      `/markets/${region}/orders?order_type=all&page=1`,
+    );
+    const orders: Order[] = [];
+    let expiry = first.expires;
+    const seen = new Set<string>();
+    for (let p = 1; p <= first.pages; p++) {
+      const page =
+        p === 1
+          ? first
+          : await client.get(
+              `/markets/${region}/orders?order_type=all&page=${p}`,
+            );
+      if (page.pages !== first.pages || page.modified !== first.modified)
+        throw Error("Страницы рынка относятся к разным поколениям");
+      for (const order of z.array(orderSchema).parse(page.body)) {
+        if (seen.has(order.order_id))
+          throw Error("Дубли ордеров между страницами");
+        seen.add(order.order_id);
+        orders.push(order);
+      }
+      expiry = Math.min(expiry, page.expires);
+    }
+    if (!first.modified) throw Error("ESI не сообщил время снимка");
+    store.sql.transaction(() => {
+      const insert = store.sql.prepare(
+        "INSERT INTO market_orders VALUES (?,?,?,?,?)",
+      );
+      for (const o of orders)
+        insert.run(id, o.order_id, o.type_id, o.location_id, JSON.stringify(o));
+      store.sql
+        .prepare(
+          "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
+        )
+        .run(
+          new Date(clock()).toISOString(),
+          first.modified,
+          new Date(expiry).toISOString(),
+          "complete",
+          first.pages,
+          id,
+        );
+      const npc = new Set(
+        (
+          store.sql
+            .prepare("SELECT id FROM stations WHERE region_id=?")
+            .all(region) as { id: string }[]
+        ).map((s) => s.id),
+      );
+      const observed = new Map<
+        string,
+        {
+          station: string;
+          type: string;
+          askQuantity: number;
+          bidQuantity: number;
+          orders: number;
+        }
+      >();
+      for (const o of orders) {
+        if (!npc.has(o.location_id)) continue;
+        const key = o.location_id + ":" + o.type_id;
+        const item = observed.get(key) ?? {
+          station: o.location_id,
+          type: o.type_id,
+          askQuantity: 0,
+          bidQuantity: 0,
+          orders: 0,
+        };
+        if (o.is_buy_order) item.bidQuantity += o.volume_remain;
+        else item.askQuantity += o.volume_remain;
+        item.orders++;
+        observed.set(key, item);
+      }
+      const observation = store.sql.prepare(
+        "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
+      );
+      for (const [key, value] of observed)
+        observation.run(
+          key + ":" + start.slice(0, 10),
+          value.station,
+          value.type,
+          start,
+          JSON.stringify({
+            ...value,
+            generation: id,
+            meaning: "daily_latest_order_snapshot_not_executed_trades",
+          }),
+        );
+      const keep = (
+        store.sql
+          .prepare(
+            "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 2",
+          )
+          .all(region) as { id: string }[]
+      ).map((r) => r.id);
+      if (keep.length === 2)
+        store.sql
+          .prepare(
+            "DELETE FROM market_orders WHERE generation IN (SELECT id FROM market_snapshot_runs WHERE region_id=?) AND generation NOT IN (?,?)",
+          )
+          .run(region, keep[0], keep[1]);
+    })();
+    return { id, count: orders.length, expires: expiry };
+  } catch (error) {
+    store.sql
+      .prepare("UPDATE market_snapshot_runs SET status='failed' WHERE id=?")
+      .run(id);
+    throw error;
+  }
+}
+export function latestSnapshots(store: Store, regions: string[]) {
+  const snapshots: {
+    region: string;
+    id: string;
+    expiresAt: string;
+    modifiedAt: string;
+  }[] = [];
+  for (const region of regions) {
+    const row = store.sql
+      .prepare(
+        "SELECT id,expires_at,modified_at FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1",
+      )
+      .get(region) as
+      { id: string; expires_at: string; modified_at: string } | undefined;
+    if (row)
+      snapshots.push({
+        region,
+        id: row.id,
+        expiresAt: row.expires_at,
+        modifiedAt: row.modified_at,
+      });
+  }
+  return snapshots;
+}
+export function latestOrders(store: Store, regions: string[]) {
+  const snapshots = latestSnapshots(store, regions);
+  const orders: Order[] = [];
+  for (const row of snapshots)
+    for (const o of store.sql
+      .prepare("SELECT payload FROM market_orders WHERE generation=?")
+      .all(row.id) as { payload: string }[])
+      orders.push(JSON.parse(o.payload));
+  return { orders, snapshots, complete: snapshots.length === regions.length };
+}

@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-02T10:30:42.502Z",
+  "executable": "release/mac-arm64/EVE Trader.app/Contents/MacOS/EVE Trader",
+  "platform": "darwin",
+  "arch": "arm64",
+  "status": "PASS",
+  "checks": [
+    "packaged worker + native SQLite + migrations + DEMO",
+    "settings write",
+    "hide to tray + show",
+    "restart persistence"
+  ],
+  "blocked": [
+    "live SSO callback/user authorization",
+    "signed installer trust/notarization"
+  ]
+}

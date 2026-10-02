@@ -1,0 +1,14 @@
+node_modules/
+dist/
+release/
+playwright-report/
+test-results/
+.cache/
+*.sqlite*
+.env*
+!.env.example
+.DS_Store
+
+*private-key*
+*.p12
+*.pfx
