@@ -34,6 +34,7 @@ export interface Opportunity {
   buy: ReturnType<typeof quote>;
   sell: ReturnType<typeof pnl>;
   sellPrice: string;
+  destinationAsks?: Level[];
   volume: string | null;
   liquidity: ReturnType<typeof liquidity>;
   historyWindows: {
@@ -131,12 +132,12 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const npcIds = new Set(data.npcStationIds ?? data.stations.map((s) => s.id));
   for (const o of orders) {
     if (!types.has(o.type_id) || o.volume_remain <= 0) continue;
-    const level: Level = {
+    const level: Level = Object.freeze({
       id: o.order_id,
       price: o.price,
       quantity: o.volume_remain,
       minVolume: o.min_volume,
-    };
+    });
     const index = o.is_buy_order ? bids : asks;
     let byLocation = index.get(o.type_id);
     if (!byLocation) {
@@ -193,6 +194,12 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
       byLocation.set(station, list);
     }
   }
+  for (const index of [asks, bids])
+    for (const locations of index.values())
+      for (const levels of locations.values()) Object.freeze(levels);
+  const histories = new Map<string, HistoryDay[]>();
+  const profiles = new Map(data.stations.map((s) => [s.id, input.profile(s)]));
+  const windows = new Map<string, Opportunity["historyWindows"]>();
   const result: Opportunity[] = [];
   for (const [typeId, sources] of asks) {
     const type = types.get(typeId)!;
@@ -208,45 +215,75 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
       ...sources.keys(),
       ...(bids.get(typeId)?.keys() ?? []),
     ]);
+    const bestAsks = new Map(
+      [...sources].map(([id, levels]) => [
+        id,
+        Decimal.min(...levels.map((l) => D(l.price))),
+      ]),
+    );
+    const bestBids = new Map(
+      [...(bids.get(typeId) ?? [])].map(([id, levels]) => [
+        id,
+        Decimal.max(...levels.map((l) => D(l.price))),
+      ]),
+    );
+    const liquidities = new Map<string, ReturnType<typeof liquidity>>();
     for (const [sourceId, supply] of sources) {
       const source = stations.get(sourceId)!;
-      const lowest = Decimal.min(...supply.map((l) => D(l.price)));
+      const lowest = bestAsks.get(sourceId)!;
       if (lowest.lte(0)) continue;
       for (const destinationId of destinations) {
         if (sourceId === destinationId) continue;
         const destination = stations.get(destinationId)!;
         const demand = bids.get(typeId)?.get(destinationId) ?? [];
         const targetAsks = sources.get(destinationId) ?? [];
-        const bestBid = demand.length
-          ? Decimal.max(...demand.map((l) => D(l.price)))
-          : D(0);
-        const bestAsk = targetAsks.length
-          ? Decimal.min(...targetAsks.map((l) => D(l.price)))
-          : D(0);
+        const bestBid = bestBids.get(destinationId) ?? D(0);
+        const bestAsk = bestAsks.get(destinationId) ?? D(0);
         if (bestBid.lte(lowest) && bestAsk.lte(lowest)) continue;
-        const profile = input.profile(destination);
+        const profile = profiles.get(destinationId);
         if (!profile) continue;
         const fee = rates(profile);
+        // Gross spreads that cannot cover even tax/listing costs cannot yield a profitable level.
+        if (
+          bestBid.mul(D(1).minus(fee.tax)).lt(lowest) &&
+          bestAsk.mul(D(1).minus(fee.tax).minus(fee.broker)).lt(lowest)
+        )
+          continue;
         const target = bestAsk.gt(0)
           ? tickBelow(bestAsk.toFixed())
           : bestBid.toFixed();
         const localBidQty = demand.reduce((s, l) => s + l.quantity, 0);
-        const history = input.history(typeId, destination.regionId);
-        const l = liquidity(
-          history,
-          input.at,
-          {
-            bidQuantity: localBidQty,
-            competitorQuantity: targetAsks
-              .filter((a) => D(a.price).lte(target))
-              .reduce((s, a) => s + a.quantity, 0),
-            observations:
-              input.local?.(typeId, destination.id).observations ?? 0,
-            confirmedSales:
-              input.local?.(typeId, destination.id).confirmedSales ?? 0,
-          },
-          target,
-        );
+        const historyKey = typeId + ":" + destination.regionId;
+        if (!histories.has(historyKey))
+          histories.set(
+            historyKey,
+            input.history(typeId, destination.regionId),
+          );
+        const history = histories.get(historyKey)!;
+        const l =
+          liquidities.get(destinationId) ??
+          liquidity(
+            history,
+            input.at,
+            {
+              bidQuantity: localBidQty,
+              competitorQuantity: targetAsks
+                .filter((a) => D(a.price).lte(target))
+                .reduce((s, a) => s + a.quantity, 0),
+              observations:
+                input.local?.(typeId, destination.id).observations ?? 0,
+              confirmedSales:
+                input.local?.(typeId, destination.id).confirmedSales ?? 0,
+            },
+            target,
+          );
+        liquidities.set(destinationId, l);
+        if (!windows.has(historyKey))
+          windows.set(historyKey, {
+            week: summarize(history, 7, input.at),
+            month: summarize(history, 30, input.at),
+            quarter: summarize(history, 90, input.at),
+          });
         const buyQ = profitableQuantity(
           supply,
           demand,
@@ -281,12 +318,11 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           supply,
           demand,
           sellPrice: target,
+          destinationAsks: [...targetAsks].sort((a, b) =>
+            D(a.price).comparedTo(b.price),
+          ),
           liquidity: l,
-          historyWindows: {
-            week: summarize(history, 7, input.at),
-            month: summarize(history, 30, input.at),
-            quarter: summarize(history, 90, input.at),
-          },
+          historyWindows: windows.get(historyKey)!,
           feeRate: fee.broker.toFixed(),
           taxRate: fee.tax.toFixed(),
           relistDiscount: fee.discount.toFixed(),

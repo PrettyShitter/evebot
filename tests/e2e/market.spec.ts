@@ -33,6 +33,12 @@ test("stage 5: filters, quantity quote, basket and idempotent acceptance", async
     await min.blur();
     await expect(rows.first()).toBeVisible();
     await rows.first().click();
+    await expect(
+      page.getByRole("region", { name: "Sell-ордера в месте продажи" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Цена вашего ордера для расчёта:", { exact: false }),
+    ).toBeVisible();
     const before = await page.getByTestId("quote-cost").textContent();
     const quantity = page.getByLabel("Количество в партии");
     const q = Number(await quantity.inputValue());

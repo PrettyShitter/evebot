@@ -7,7 +7,7 @@ import {
 import { writeFileSync } from "node:fs";
 import { Reconciler } from "./accounting/reconcile";
 import { demoOperations } from "./accounting/demo-operations";
-import { parentPort, workerData } from "node:worker_threads";
+import { Worker, parentPort, workerData } from "node:worker_threads";
 import { join } from "node:path";
 import { statSync, existsSync } from "node:fs";
 import { Store } from "../db/store";
@@ -24,6 +24,7 @@ import { latestOrders, latestSnapshots } from "./market/snapshots";
 import { stationProfile, type ProfileData } from "./portfolio/profile";
 import type { HistoryDay } from "../shared/contracts/esi";
 import { Portfolio } from "./portfolio/repository";
+import { ownSellOrders, replaceActiveOrders } from "./portfolio/orders";
 import type { WalletData } from "./portfolio/sync";
 import { requestSchema, type AppState } from "../shared/contracts/app";
 const config = workerData as {
@@ -66,7 +67,96 @@ function filtered() {
   }
   return cached;
 }
+let calculationBusy = false;
+let calculationAt = 0;
+let calculationError = "";
+let calculationWorker: Worker | undefined;
+function liveCandidates() {
+  if (!market.data) return [];
+  const snapshots = latestSnapshots(store, market.data.regions);
+  const budget = portfolio.currentBudget();
+  const settings = store.getSettings();
+  const structural = {
+    ...settings,
+    minProfit: "0",
+    minTripProfit: "0",
+    roiEnabled: false,
+    minROI: 0,
+    sort: "best" as const,
+    notificationThreshold: "0",
+    sound: false,
+  };
+  const key = JSON.stringify([
+    snapshots.map((s) => s.id),
+    structural,
+    budget,
+    [...trades.exposures()],
+    store.sql.prepare("SELECT count(*) n FROM sale_allocations").get(),
+    store.sql
+      .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
+      .get(),
+  ]);
+  if (
+    !calculationBusy &&
+    (key !== signature ||
+      filterSignature !== JSON.stringify(settings) ||
+      Date.now() - calculationAt > 30000)
+  ) {
+    calculationBusy = true;
+    calculationError = "";
+    if (!calculationWorker) {
+      calculationWorker = new Worker(join(__dirname, "calculator.cjs"), {
+        workerData: config,
+      });
+      calculationWorker.on(
+        "message",
+        (message: {
+          result?: {
+            key: string;
+            filtered: Opportunity[];
+            filterSignature: string;
+          };
+          error?: string;
+        }) => {
+          calculationBusy = false;
+          calculationAt = Date.now();
+          if (message.result) {
+            cached = message.result.filtered;
+            signature = message.result.key;
+            filterSignature = message.result.filterSignature;
+            saveFeatures(store, cached);
+            notifications = [
+              ...notifications,
+              ...alerts.select(
+                cached,
+                store.getSettings().notificationThreshold,
+              ),
+            ].slice(-20);
+          } else
+            calculationError = "Не удалось рассчитать рынок. Повторяем расчёт.";
+        },
+      );
+      calculationWorker.on("error", () => {
+        calculationBusy = false;
+        calculationAt = Date.now();
+        calculationError = "Расчёт рынка остановился. Повторяем расчёт.";
+        calculationWorker = undefined;
+      });
+    }
+    calculationWorker.postMessage({
+      kind:
+        key === signature && filterSignature !== JSON.stringify(settings)
+          ? "filter"
+          : "calculate",
+    });
+  }
+  // Do not allow an old budget, profile or market generation to be traded.
+  if (key !== signature || filterSignature !== JSON.stringify(settings))
+    return [];
+  return cached;
+}
 function candidates() {
+  if (!config.demo) return liveCandidates();
   if (!market.data) return [];
   const snapshots = latestSnapshots(store, market.data.regions);
   const budget = portfolio.currentBudget();
@@ -183,6 +273,7 @@ function state(): AppState {
   const b = portfolio.currentBudget();
   return {
     demo: config.demo,
+    ownSellOrders: ownSellOrders(store),
     notifications,
     review: reconciler.review(),
     systemNames: Object.fromEntries(
@@ -208,7 +299,12 @@ function state(): AppState {
           market.summary().regions +
           " регионов"
         : "Подключите три персонажа",
-    market: market.summary(),
+    market: {
+      ...market.summary(),
+      status: calculationBusy
+        ? "Расчёт торговых возможностей… Рынок и кошельки доступны."
+        : calculationError || market.status,
+    },
     databaseSize: existsSync(path) ? statSync(path).size : 0,
   };
 }
@@ -236,6 +332,9 @@ parentPort!.on(
         const wallets = message.internal.wallets;
         store.sql.transaction(() => {
           portfolio.importWallets(wallets);
+          for (const w of wallets)
+            if (w.orders !== undefined)
+              replaceActiveOrders(store, w.id, w.orders);
           for (const w of wallets)
             for (const [state, rows] of [
               ["active", w.orders ?? []],

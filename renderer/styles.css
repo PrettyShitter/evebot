@@ -212,10 +212,9 @@ a {
 }
 .market-row {
   display: grid;
-  grid-template-columns: minmax(230px, 2fr) minmax(100px, 0.85fr) minmax(
-      130px,
-      1fr
-    ) minmax(125px, 1fr) minmax(140px, 1fr) minmax(135px, 1fr);
+  grid-template-columns:
+    minmax(230px, 2fr) minmax(100px, 0.85fr) minmax(130px, 1fr)
+    minmax(125px, 1fr) minmax(140px, 1fr) minmax(135px, 1fr);
   align-items: center;
   gap: 12px;
   padding: 12px 18px;
@@ -254,10 +253,47 @@ a {
 .data-row .numeric {
   text-align: right;
 }
+.table-header .numeric {
+  text-align: right;
+}
+.data-row .numeric small {
+  justify-content: flex-end;
+}
+.data-row > span {
+  min-width: 0;
+}
+.data-row small {
+  line-height: 1.35;
+}
+.order-depth > div {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  text-align: right;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
 .virtual-table {
   height: 420px;
   overflow: auto;
   contain: strict;
+}
+.owned-orders {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.owned-orders th,
+.owned-orders td {
+  padding: 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.owned-orders th:first-child,
+.owned-orders td:first-child {
+  text-align: left;
 }
 .filters {
   display: grid;

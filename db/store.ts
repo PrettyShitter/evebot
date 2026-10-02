@@ -19,14 +19,20 @@ export class Store {
   constructor(
     readonly path: string,
     migrationPath: string,
+    options: { readonly?: boolean } = {},
   ) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.sql = new Database(path);
+    this.sql = new Database(path, options);
     this.sql.pragma("foreign_keys = ON");
-    this.sql.pragma("journal_mode = WAL");
+    if (!options.readonly) this.sql.pragma("journal_mode = WAL");
     this.sql.pragma("busy_timeout = 5000");
     this.orm = drizzle(this.sql);
     const version = Number(this.sql.pragma("user_version", { simple: true }));
+    if (options.readonly) {
+      if (version !== 2)
+        throw Error("Database migration required before calculation");
+      return;
+    }
     try {
       if (version > 2) throw Error("Версия базы новее приложения");
       if (version > 0 && version < 2 && path !== ":memory:")

@@ -5,6 +5,24 @@ export interface Level {
   quantity: number;
   minVolume?: number;
 }
+// Only frozen ladders can be cached: mutable callers must observe later edits.
+const ordered = new WeakMap<
+  Level[],
+  Partial<Record<"buy" | "sell", Level[]>>
+>();
+function sortedLevels(levels: Level[], side: "buy" | "sell") {
+  const immutable = Object.isFrozen(levels) && levels.every(Object.isFrozen);
+  const cached = immutable ? ordered.get(levels)?.[side] : undefined;
+  if (cached) return cached;
+  const sorted = [...levels].sort(
+    (a, b) =>
+      D(a.price).comparedTo(b.price) * (side === "buy" ? 1 : -1) ||
+      a.id.localeCompare(b.id),
+  );
+  if (immutable)
+    ordered.set(levels, { ...ordered.get(levels), [side]: sorted });
+  return sorted;
+}
 export interface Fill {
   id: string;
   price: string;
@@ -21,11 +39,7 @@ export function fill(
     throw Error("Некорректное количество");
   let remaining = quantity;
   const fills: Fill[] = [];
-  const sorted = [...levels].sort(
-    (a, b) =>
-      D(a.price).comparedTo(b.price) * (side === "buy" ? 1 : -1) ||
-      a.id.localeCompare(b.id),
-  );
+  const sorted = sortedLevels(levels, side);
   for (const l of sorted) {
     if (!remaining) break;
     const available = Math.max(0, l.quantity - (used.get(l.id) || 0));
@@ -97,8 +111,8 @@ export function profitableQuantity(
   taxRate: string,
   minROI: string,
 ) {
-  const asks = [...supply].sort((a, b) => D(a.price).comparedTo(b.price));
-  const bids = [...demand].sort((a, b) => D(b.price).comparedTo(a.price));
+  const asks = sortedLevels(supply, "buy");
+  const bids = sortedLevels(demand, "sell");
   let ai = 0,
     bi = 0,
     aq = 0,

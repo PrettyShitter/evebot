@@ -149,6 +149,9 @@ export interface CharacterView {
   balance: string | null;
 }
 export interface AppState {
+  ownSellOrders?: ReturnType<
+    typeof import("../../engine/portfolio/orders").ownSellOrders
+  >;
   update?: import("./update").UpdateView;
   demo: boolean;
   notifications: { id: string; name: string; profit: string; at: string }[];

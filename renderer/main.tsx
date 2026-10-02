@@ -76,7 +76,10 @@ function App() {
   }
   useEffect(() => {
     let alive = true;
+    let inFlight = false;
     const refresh = () => {
+      if (inFlight) return;
+      inFlight = true;
       void window.eve
         .request({ kind: "state" })
         .then((s) => {
@@ -84,6 +87,9 @@ function App() {
         })
         .catch((e) => {
           if (alive) setError(e.message);
+        })
+        .finally(() => {
+          inFlight = false;
         });
     };
     refresh();

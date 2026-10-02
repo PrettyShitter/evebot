@@ -42,6 +42,10 @@ export function MarketView({
     if (rows.length === 0 && state.opportunities.length)
       setRows(state.opportunities);
   }, [state.opportunities, rows.length]);
+  const currentIds = useMemo(
+    () => new Set(state.opportunities.map((o) => o.id)),
+    [state.opportunities],
+  );
   const columns = useMemo(
     () => [{ id: "type", accessorFn: (o: Opportunity) => o.type.name }],
     [],
@@ -51,7 +55,7 @@ export function MarketView({
   const virtual = useVirtualizer({
     count: model.length,
     getScrollElement: () => parent.current,
-    estimateSize: () => 74,
+    estimateSize: () => 106,
     overscan: 8,
   });
   const changed =
@@ -202,7 +206,9 @@ export function MarketView({
       )}
       <section className="market-panel">
         <div className="table-intro">
-          <span>Ожидаемые результаты · покупки по глубине стакана</span>
+          <span>
+            Прибыль за партию после налогов и комиссий · перевозка не включена
+          </span>
           {changed && (
             <Button
               size="sm"
@@ -215,10 +221,10 @@ export function MarketView({
         </div>
         <div className="market-row table-header" role="row">
           <span>Товар / направление</span>
-          <span>Количество</span>
-          <span>Закупка / м³</span>
-          <span>Продать сразу</span>
-          <span>Выставить ордер</span>
+          <span className="numeric">Партия / объём</span>
+          <span className="numeric">Закупка, ISK</span>
+          <span className="numeric">Прибыль сразу, ISK</span>
+          <span className="numeric">Прибыль sell, ISK</span>
           <span>Спрос</span>
         </div>
         <div
@@ -233,6 +239,7 @@ export function MarketView({
               return (
                 <button
                   className="market-row data-row"
+                  disabled={busy || !currentIds.has(o.id)}
                   key={o.id}
                   onClick={() => void show(o)}
                   style={{
@@ -253,27 +260,47 @@ export function MarketView({
                     </small>
                   </span>
                   <span className="numeric">
-                    {money(String(o.quantity))}
-                    <small>выгодная партия</small>
+                    {money(String(o.quantity))} шт.
+                    <small>{money(o.volume, 2)} м³</small>
                   </span>
                   <span className="numeric">
                     {money(o.purchase.total)}
-                    <small>{money(o.volume, 2)} м³</small>
+                    <small>
+                      от {money(o.purchase.fills[0]?.price ?? null, 2)} ISK/шт.
+                    </small>
                   </span>
                   <span className={"numeric " + signClass(o.buy.result.profit)}>
                     {money(o.buy.result.profit)}
                     <small>
+                      ROI{" "}
                       {o.buy.fullROI === null
                         ? `${o.buy.sale.filled}/${o.quantity} · частично`
                         : roi(o.buy.fullROI)}{" "}
                       {o.rankedBy === "buy" ? "↑" : ""}
                     </small>
                   </span>
-                  <span className={"numeric " + signClass(o.sell.profit)}>
-                    {money(o.sell.profit)}
+                  <span
+                    className={
+                      "numeric " +
+                      signClass(
+                        o.liquidity.sellQuantity >= o.quantity
+                          ? o.sell.profit
+                          : null,
+                      )
+                    }
+                  >
+                    {o.liquidity.sellQuantity >= o.quantity
+                      ? money(o.sell.profit)
+                      : "—"}
                     <small>
-                      {roi(o.sell.roi)} · прогноз{" "}
+                      {o.liquidity.sellQuantity >= o.quantity
+                        ? `ROI ${roi(o.sell.roi)} · прогноз`
+                        : "Недостаточно спроса"}{" "}
                       {o.rankedBy === "sell" ? "↑" : ""}
+                    </small>
+                    <small>
+                      Sell от {money(o.destinationAsks?.[0]?.price ?? null, 2)}{" "}
+                      / шт.
                     </small>
                   </span>
                   <span className="caption">
@@ -281,9 +308,11 @@ export function MarketView({
                       ? "Buy покрывает 100%"
                       : o.liquidity.reasons[0]}
                     <small>
-                      {o.liquidity.sellQuantity
-                        ? "Sell: оценочный"
-                        : "Sell: мало данных"}
+                      {o.liquidity.sellQuantity >= o.quantity
+                        ? "Sell: прогноз на партию"
+                        : o.liquidity.sellQuantity > 0
+                          ? `Sell: до ${money(String(o.liquidity.sellQuantity))} шт.`
+                          : "Sell: мало данных"}
                     </small>
                   </span>
                 </button>
@@ -292,7 +321,11 @@ export function MarketView({
           </div>
           {!rows.length && (
             <div className="empty">
-              <h2>Подходящих предложений пока нет</h2>
+              <h2>
+                {state.market.status.startsWith("Расчёт")
+                  ? "Рассчитываем торговые возможности…"
+                  : "Подходящих предложений пока нет"}
+              </h2>
               <p>
                 Проверьте бюджет, свежесть рынка и профиль продавца. Фильтры
                 могут исключать все доступные партии.
@@ -307,6 +340,47 @@ export function MarketView({
         {state.market.regions} · история {state.market.historyPairs}{" "}
         товар/регион. {state.market.status}
       </p>
+      <details className="panel mt-5">
+        <summary>Мои sell-ордера · {state.ownSellOrders?.length ?? 0}</summary>
+        <p className="caption my-3">
+          Активные ордера подключённого продавца по последней сверке кошельков.
+          Личные продажи вне приложения также включены.
+        </p>
+        {state.ownSellOrders?.length ? (
+          <div className="overflow-x-auto max-h-80 overflow-y-auto">
+            <table className="owned-orders" aria-label="Мои sell-ордера">
+              <thead>
+                <tr>
+                  <th>Товар / станция</th>
+                  <th>Цена, ISK/шт.</th>
+                  <th>Осталось, шт.</th>
+                  <th>Обновлено</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.ownSellOrders.map((order) => (
+                  <tr key={order.id}>
+                    <td>
+                      {order.type}
+                      <small className="block caption">
+                        {order.station} · {order.character}
+                      </small>
+                    </td>
+                    <td>{money(order.price, 2)}</td>
+                    <td>{money(String(order.remaining))}</td>
+                    <td>{new Date(order.updatedAt).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p>
+            Активные sell-ордера не загружены или отсутствуют. Нажмите «Сверить
+            кошельки» в настройках.
+          </p>
+        )}
+      </details>
       {cart.length > 0 && state.basket && (
         <section className="panel mt-5">
           <div className="flex justify-between items-start">
@@ -407,6 +481,41 @@ export function MarketView({
                 {preview.source.name}
                 <br />→ {preview.destination.name}
               </p>
+              <section
+                className="panel space-y-2"
+                aria-label="Sell-ордера в месте продажи"
+              >
+                <h3>Sell-ордера в месте продажи</h3>
+                <p className="caption">
+                  Текущие предложения продавцов на станции назначения. Это не
+                  исполненные продажи.
+                </p>
+                {preview.destinationAsks?.length ? (
+                  <div className="order-depth">
+                    <div>
+                      <strong>Цена, ISK/шт.</strong>
+                      <strong>Осталось, шт.</strong>
+                    </div>
+                    {preview.destinationAsks.slice(0, 10).map((level) => (
+                      <div key={level.id}>
+                        <span>{money(level.price, 2)}</span>
+                        <span>{money(String(level.quantity))}</span>
+                      </div>
+                    ))}
+                    <p className="caption">
+                      Показаны первые{" "}
+                      {Math.min(10, preview.destinationAsks.length)} из{" "}
+                      {preview.destinationAsks.length} ордеров.
+                    </p>
+                  </div>
+                ) : (
+                  <p>Sell-ордеров на этой станции в снимке нет.</p>
+                )}
+                <p>
+                  Цена вашего ордера для расчёта:{" "}
+                  <strong>{money(preview.sellPrice, 2)} ISK/шт.</strong>
+                </p>
+              </section>
               <label className="field">
                 Количество в партии
                 <Input

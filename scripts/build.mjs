@@ -7,6 +7,7 @@ await build({
     main: "desktop/main.ts",
     preload: "desktop/preload.ts",
     worker: "engine/worker.ts",
+    calculator: "engine/calculator.ts",
   },
   bundle: true,
   platform: "node",
