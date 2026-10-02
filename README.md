@@ -8,7 +8,7 @@
 
 - Готовый образ: [последний релиз macOS arm64](https://github.com/PrettyShitter/evebot/releases/latest).
 - Приложение: [EVE Trader.app](release/mac-arm64/EVE%20Trader.app).
-- Сборка без Developer ID/notarization. На macOS неподписанная загрузка может потребовать открытия через системное «Открыть».
+- Сборка с ad-hoc подписью, без Developer ID/notarization. Для первого запуска macOS может потребовать «Всё равно открыть» в разделе «Конфиденциальность и безопасность» системных настроек.
 - Для знакомства откройте Настройки → «Открыть DEMO отдельно». DEMO хранится в другой базе.
 - Для реального портфеля: [SSO_SETUP.md](SSO_SETUP.md).
 

@@ -2,6 +2,7 @@ import { _electron as electron } from "@playwright/test";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 const executable =
   process.argv[2] ??
   (process.platform === "darwin"
@@ -11,6 +12,20 @@ const directory = mkdtempSync(join(tmpdir(), "eve-packaged-"));
 let app;
 const checks = [];
 try {
+  if (process.platform === "darwin") {
+    execFileSync(
+      "/usr/bin/codesign",
+      [
+        "--verify",
+        "--deep",
+        "--strict",
+        "--verbose=2",
+        resolve(executable, "../../.."),
+      ],
+      { stdio: "inherit" },
+    );
+    checks.push("macOS bundle signature integrity (not Apple notarization)");
+  }
   const launch = () =>
     electron.launch({
       executablePath: resolve(executable),
