@@ -16,6 +16,7 @@ export class MarketService {
   readonly client = new EsiClient();
   readonly scheduler = new Scheduler();
   data: StaticData | null;
+  private searchLocations = new Set<string>();
   status = "Рынок ещё не загружен";
   constructor(
     private store: Store,
@@ -39,6 +40,7 @@ export class MarketService {
       }
       this.data = narrowed;
     }
+    this.searchLocations = new Set(this.data?.stations.map((s) => s.id) ?? []);
     store.sql
       .prepare(
         "UPDATE market_snapshot_runs SET status='interrupted' WHERE status='loading'",
@@ -52,7 +54,13 @@ export class MarketService {
       this.scheduler.schedule("market:" + region, 2, Date.now(), async () => {
         this.status = "Загрузка рынка региона " + region;
         try {
-          const r = await syncRegion(this.store, this.client, region);
+          const r = await syncRegion(
+            this.store,
+            this.client,
+            region,
+            Date.now,
+            this.searchLocations,
+          );
           this.status = "Рынок обновлён; история загружается отдельно";
           this.queueHistory(region);
           return r.expires;
@@ -68,7 +76,9 @@ export class MarketService {
     const types = new Set(
       (
         this.store.sql
-          .prepare("SELECT DISTINCT type_id FROM market_orders WHERE generation=?")
+          .prepare(
+            "SELECT DISTINCT type_id FROM market_orders WHERE generation=?",
+          )
           .all(generation.id) as { type_id: string }[]
       ).map((row) => row.type_id),
     );
@@ -84,9 +94,10 @@ export class MarketService {
     if (this.demo) throw Error("Обновление SDE недоступно в DEMO");
     this.status = "Загрузка официального SDE…";
     try {
-      const data = await downloadSde();
+      const data = withSearchZone(await downloadSde());
       importStatic(this.store, data);
       this.data = data;
+      this.searchLocations = new Set(data.stations.map((s) => s.id));
       this.status = "SDE " + data.version + " обновлён";
       this.scan();
     } catch (e) {

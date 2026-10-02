@@ -51,27 +51,44 @@ it("stage 3: atomic generations, failed page leaves previous data intact", async
 });
 it("yields between market-order batches while preserving atomic generations", async () => {
   const s = new Store(":memory:", resolve("db/migrations"));
-  const bulk = Array.from({ length: 2500 }, (_, index) =>
-    order(index + 1),
-  );
-  const client = new EsiClient(async () =>
-    new Response(JSON.stringify(bulk), {
-      headers: {
-        "X-Pages": "1",
-        "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
-        "Cache-Control": "max-age=1",
-      },
-    }),
-  );
-  try {
-    const initial = new EsiClient(async () =>
-      new Response(JSON.stringify([order(3000)]), {
+  const bulk = Array.from({ length: 2500 }, (_, index) => ({
+    ...order(index + 1),
+    type_id: String(5000 + index),
+    location_id: String(60000000 + index),
+  }));
+  bulk.push({ ...order(3001), type_id: "8000", location_id: "69999999" });
+  const client = new EsiClient(
+    async () =>
+      new Response(JSON.stringify(bulk), {
         headers: {
           "X-Pages": "1",
           "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
           "Cache-Control": "max-age=1",
         },
       }),
+  );
+  try {
+    const insertStation = s.sql.prepare(
+      "INSERT INTO stations VALUES (?,?,?,?,?)",
+    );
+    s.sql
+      .prepare("INSERT INTO systems VALUES (?,?,?,?)")
+      .run("30000142", "Test system", "1", 0.9);
+    const allowed = new Set<string>();
+    for (let index = 0; index < 2500; index++) {
+      const id = String(60000000 + index);
+      allowed.add(id);
+      insertStation.run(id, "Test station", "30000142", "1", "1");
+    }
+    const initial = new EsiClient(
+      async () =>
+        new Response(JSON.stringify([order(3000)]), {
+          headers: {
+            "X-Pages": "1",
+            "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+            "Cache-Control": "max-age=1",
+          },
+        }),
     );
     await syncRegion(s, initial, "1");
     let timerRan = false;
@@ -83,12 +100,19 @@ it("yields between market-order batches while preserving atomic generations", as
         resolve();
       }, 0),
     );
-    const sync = syncRegion(s, client, "1");
+    const sync = syncRegion(s, client, "1", Date.now, allowed);
     await timer;
     expect(timerRan).toBe(true);
     expect(visibleDuringSync).toBe(1);
-    await sync;
+    expect((await sync).count).toBe(2501);
     expect(latestOrders(s, ["1"]).orders).toHaveLength(2500);
+    expect(
+      (
+        s.sql.prepare("SELECT count(*) n FROM station_observations").get() as {
+          n: number;
+        }
+      ).n,
+    ).toBe(2500);
   } finally {
     s.close();
   }

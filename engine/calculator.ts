@@ -61,7 +61,7 @@ function calculate() {
   >();
   for (const row of store.sql
     .prepare(
-      "SELECT station_id,type_id,count(*) n FROM station_observations WHERE at>=? AND at<=? GROUP BY station_id,type_id",
+      "SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<=? AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id",
     )
     .all(since, at) as { station_id: string; type_id: string; n: number }[])
     local.set(row.type_id + ":" + row.station_id, {

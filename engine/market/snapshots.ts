@@ -8,6 +8,7 @@ export async function syncRegion(
   client: EsiClient,
   region: string,
   clock: () => number = Date.now,
+  allowedLocations?: ReadonlySet<string>,
 ) {
   const id = randomUUID(),
     start = new Date(clock()).toISOString();
@@ -66,6 +67,7 @@ export async function syncRegion(
         "INSERT INTO market_orders VALUES (?,?,?,?,?)",
       );
       for (const o of batch) {
+        if (allowedLocations && !allowedLocations.has(o.location_id)) continue;
         insert.run(id, o.order_id, o.type_id, o.location_id, JSON.stringify(o));
         if (!npc.has(o.location_id)) continue;
         const key = o.location_id + ":" + o.type_id;
@@ -89,35 +91,41 @@ export async function syncRegion(
     }
 
     const observationRows = [...observed.entries()];
-    store.sql.transaction(() => {
-      const observation = store.sql.prepare(
-        "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
+    const insertObservations = store.sql.transaction(
+      (batch: (typeof observationRows)[number][]) => {
+        const observation = store.sql.prepare(
+          "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
+        );
+        for (const [key, value] of batch)
+          observation.run(
+            key + ":" + start.slice(0, 10),
+            value.station,
+            value.type,
+            start,
+            JSON.stringify({
+              ...value,
+              generation: id,
+              meaning: "daily_latest_order_snapshot_not_executed_trades",
+            }),
+          );
+      },
+    );
+    for (let offset = 0; offset < observationRows.length; offset += batchSize) {
+      insertObservations(observationRows.slice(offset, offset + batchSize));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    store.sql
+      .prepare(
+        "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
+      )
+      .run(
+        new Date(clock()).toISOString(),
+        first.modified,
+        new Date(expiry).toISOString(),
+        "complete",
+        first.pages,
+        id,
       );
-      for (const [key, value] of observationRows)
-        observation.run(
-          key + ":" + start.slice(0, 10),
-          value.station,
-          value.type,
-          start,
-          JSON.stringify({
-            ...value,
-            generation: id,
-            meaning: "daily_latest_order_snapshot_not_executed_trades",
-          }),
-        );
-      store.sql
-        .prepare(
-          "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
-        )
-        .run(
-          new Date(clock()).toISOString(),
-          first.modified,
-          new Date(expiry).toISOString(),
-          "complete",
-          first.pages,
-          id,
-        );
-    })();
 
     const keep = (
       store.sql
