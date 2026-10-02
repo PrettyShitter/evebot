@@ -61,6 +61,19 @@ describe("stage 0: exact contracts and mandatory mechanics", () => {
     expect(q.sale.total).toBe("2900.00");
     expect(q.result.profit).toBe("410.00");
   });
+  it("instant purchase consumes sell orders only, cheapest ask first", () => {
+    const asks = [
+      { id: "expensive-ask", quantity: 3, price: "74400000" },
+      { id: "cheap-ask", quantity: 1, price: "70000000" },
+    ];
+    const bid = [{ id: "best-buy-order", quantity: 100, price: "15330000" }];
+    const purchase = quote(asks, bid, 2, ".01").purchase;
+    expect(purchase.fills.map((x) => x.price)).toEqual([
+      "70000000",
+      "74400000",
+    ]);
+    expect(purchase.total).toBe("144400000.00");
+  });
   it("fixture 2: partial demand never claims full ROI; minimum execution volume", () => {
     const q = quote(
       supply,

@@ -20,6 +20,9 @@ it("stage 4: candidates reproducible, both scenarios, quantities, type cap, bask
       second = demoScan(s);
     expect(first).toEqual(second);
     expect(first.length).toBeGreaterThan(0);
+    expect(
+      first.every((o) => o.volume !== null && D(o.volume).lte(100000)),
+    ).toBe(true);
     const full = first[0],
       half = selectQuantity(full, Math.floor(full.quantity / 2));
     expect(D(half.purchase.total).lt(full.purchase.total)).toBe(true);

@@ -73,6 +73,14 @@ export function MarketView({
     setQuantity(String(o.quantity));
     await request({ kind: "quote", id: o.id, quantity: o.quantity });
   }
+  async function copyName(name: string) {
+    try {
+      await request({ kind: "clipboard.copy", text: name });
+      setMessage(`Скопировано: ${name}`);
+    } catch (error) {
+      setMessage(`Не удалось скопировать название: ${String(error)}`);
+    }
+  }
   const preview = state.preview?.id === chosen?.id ? state.preview : chosen;
   async function add() {
     if (!chosen || !preview) return;
@@ -253,7 +261,25 @@ export function MarketView({
                   aria-label={`${o.type.name}: ${o.source.name} → ${o.destination.name}`}
                 >
                   <span>
-                    <strong>{o.type.name}</strong>
+                    <strong
+                      className="cursor-copy hover:underline"
+                      title="Нажмите, чтобы скопировать название"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void copyName(o.type.name);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void copyName(o.type.name);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      {o.type.name}
+                    </strong>
                     <small>
                       {o.source.name.split(" - ")[0]} <ArrowUpRight size={11} />{" "}
                       {o.destination.name.split(" - ")[0]}

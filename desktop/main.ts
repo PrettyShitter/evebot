@@ -274,6 +274,11 @@ app.whenReady().then(async () => {
       return requestEngine({ kind: "state" });
     }
 
+    if (req.kind === "clipboard.copy") {
+      clipboard.writeText(req.text);
+      return requestEngine({ kind: "state" });
+    }
+
     if (req.kind === "basket.copy") {
       const result = await requestEngine(req);
       clipboard.writeText(result.basket?.multibuy ?? "");

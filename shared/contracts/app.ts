@@ -39,6 +39,12 @@ export const requestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("update.install") }).strict(),
   z
     .object({
+      kind: z.literal("clipboard.copy"),
+      text: z.string().min(1).max(200),
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal("purchase.bind"),
       characterId: z.string(),
       transactionId: z.string(),

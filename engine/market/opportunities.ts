@@ -201,8 +201,19 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const profiles = new Map(data.stations.map((s) => [s.id, input.profile(s)]));
   const windows = new Map<string, Opportunity["historyWindows"]>();
   const result: Opportunity[] = [];
+  const maxCargoVolume = D("100000");
   for (const [typeId, sources] of asks) {
     const type = types.get(typeId)!;
+    // Do not recommend items with unknown/oversized packaged volume. Cap every
+    // proposed lot as well, so a stack cannot exceed the hauling limit.
+    if (
+      !type.volume ||
+      D(type.volume).lte(0) ||
+      D(type.volume).gt(maxCargoVolume)
+    )
+      continue;
+    const cargoLimit = maxCargoVolume.div(type.volume).floor().toNumber();
+    if (!Number.isSafeInteger(cargoLimit) || cargoLimit < 1) continue;
     const typeBudget = Decimal.max(
       0,
       D(input.pool)
@@ -306,7 +317,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
               settings.roiEnabled ? String(settings.minROI / 100) : "0",
             )
           : 0;
-        let quantity = Math.max(buyQ, sellQ);
+        let quantity = Math.min(cargoLimit, Math.max(buyQ, sellQ));
         if (quantity <= 0) continue;
         const base = {
           id: [typeId, sourceId, destinationId].join(":"),
