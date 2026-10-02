@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-02T09:49:56.541Z
+UTC: 2026-10-02T13:39:33.933Z
 
-Commit: репозиторий без коммитов; проверяется рабочее дерево.
+Commit: e242b3874fcffaa330ceaca05a72c5a6dc38da5b; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -31,10 +31,10 @@ Exit code: 0; PASS
  RUN  v5.0.3 /Users/wozglas/Documents/ChatGPT/eve online bot
 
 
- Test Files  3 passed (3)
-      Tests  21 passed (21)
-   Start at  16:49:59
-   Duration  148ms (import 47%, transform 33%, tests 17%, worker 3%)
+ Test Files  5 passed (5)
+      Tests  27 passed (27)
+   Start at  20:39:48
+   Duration  1.39s (import 47%, transform 37%, tests 12%, worker 4%)
 
 $ vitest run tests/unit
 
@@ -49,10 +49,13 @@ Exit code: 0; PASS
  RUN  v5.0.3 /Users/wozglas/Documents/ChatGPT/eve online bot
 
 
- Test Files  9 passed (9)
-      Tests  19 passed (19)
-   Start at  16:49:59
-   Duration  890ms (import 83%, transform 10%, tests 7%)
+ Test Files  12 passed (12)
+      Tests  25 passed (25)
+   Start at  20:39:52
+   Duration  11.85s (import 60%, tests 32%, transform 7%, worker 1%)
+
+    Isolate  12 workers spawned · ~2.72s startup each (spawn + environment, per file)
+             at least ~905ms faster with isolate: false — reuses workers across files instead of one per file
 
 $ vitest run tests/integration
 
@@ -65,14 +68,14 @@ Exit code: 0; PASS
 ```text
 vite v8.3.2 building client environment for production...
 transforming...
-✓ 2065 modules transformed.
+✓ 2066 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/renderer/index.html                   0.61 kB │ gzip:   0.38 kB
-dist/renderer/assets/index-CXtB1Sl9.css   22.88 kB │ gzip:   5.24 kB
-dist/renderer/assets/index-6PZGMiBZ.js   429.68 kB │ gzip: 136.53 kB
+dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
+dist/renderer/assets/index-DQEV8N2e.css   23.65 kB │ gzip:   5.38 kB
+dist/renderer/assets/index-9UFy79Hi.js   435.54 kB │ gzip: 137.80 kB
 
-✓ built in 136ms
+✓ built in 532ms
 $ node scripts/build.mjs
 
 ```
@@ -85,15 +88,15 @@ Exit code: 0; PASS
 
 Running 4 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (1.9s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (840ms)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (6.7s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (2.2s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (1.3s)
+  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (3.5s)
 
   1 skipped
-  3 passed (4.6s)
+  3 passed (16.0s)
 $ playwright test
-(node:55991) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:94623) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```

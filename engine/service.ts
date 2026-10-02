@@ -10,7 +10,7 @@ import {
   withSearchZone,
   type StaticData,
 } from "./market/static-data";
-import { syncRegion, latestOrders } from "./market/snapshots";
+import { syncRegion, latestSnapshots } from "./market/snapshots";
 import { syncHistory } from "./history/history";
 export class MarketService {
   readonly client = new EsiClient();
@@ -63,8 +63,14 @@ export class MarketService {
       });
   }
   private queueHistory(region: string) {
+    const generation = latestSnapshots(this.store, [region])[0];
+    if (!generation) return;
     const types = new Set(
-      latestOrders(this.store, [region]).orders.map((o) => o.type_id),
+      (
+        this.store.sql
+          .prepare("SELECT DISTINCT type_id FROM market_orders WHERE generation=?")
+          .all(generation.id) as { type_id: string }[]
+      ).map((row) => row.type_id),
     );
     for (const type of types)
       this.scheduler.schedule(

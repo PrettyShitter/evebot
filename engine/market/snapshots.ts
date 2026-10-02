@@ -39,42 +39,34 @@ export async function syncRegion(
       expiry = Math.min(expiry, page.expires);
     }
     if (!first.modified) throw Error("ESI не сообщил время снимка");
-    store.sql.transaction(() => {
+    const npc = new Set(
+      (
+        store.sql
+          .prepare("SELECT id FROM stations WHERE region_id=?")
+          .all(region) as { id: string }[]
+      ).map((s) => s.id),
+    );
+    const observed = new Map<
+      string,
+      {
+        station: string;
+        type: string;
+        askQuantity: number;
+        bidQuantity: number;
+        orders: number;
+      }
+    >();
+
+    // Keep the engine worker responsive while a large region snapshot is
+    // persisted. The generation remains `loading` until every batch and its
+    // station observations have been written, so readers keep using the last
+    // complete snapshot.
+    const insertOrders = store.sql.transaction((batch: Order[]) => {
       const insert = store.sql.prepare(
         "INSERT INTO market_orders VALUES (?,?,?,?,?)",
       );
-      for (const o of orders)
+      for (const o of batch) {
         insert.run(id, o.order_id, o.type_id, o.location_id, JSON.stringify(o));
-      store.sql
-        .prepare(
-          "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
-        )
-        .run(
-          new Date(clock()).toISOString(),
-          first.modified,
-          new Date(expiry).toISOString(),
-          "complete",
-          first.pages,
-          id,
-        );
-      const npc = new Set(
-        (
-          store.sql
-            .prepare("SELECT id FROM stations WHERE region_id=?")
-            .all(region) as { id: string }[]
-        ).map((s) => s.id),
-      );
-      const observed = new Map<
-        string,
-        {
-          station: string;
-          type: string;
-          askQuantity: number;
-          bidQuantity: number;
-          orders: number;
-        }
-      >();
-      for (const o of orders) {
         if (!npc.has(o.location_id)) continue;
         const key = o.location_id + ":" + o.type_id;
         const item = observed.get(key) ?? {
@@ -89,10 +81,19 @@ export async function syncRegion(
         item.orders++;
         observed.set(key, item);
       }
+    });
+    const batchSize = 1000;
+    for (let offset = 0; offset < orders.length; offset += batchSize) {
+      insertOrders(orders.slice(offset, offset + batchSize));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    const observationRows = [...observed.entries()];
+    store.sql.transaction(() => {
       const observation = store.sql.prepare(
         "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
       );
-      for (const [key, value] of observed)
+      for (const [key, value] of observationRows)
         observation.run(
           key + ":" + start.slice(0, 10),
           value.station,
@@ -104,22 +105,60 @@ export async function syncRegion(
             meaning: "daily_latest_order_snapshot_not_executed_trades",
           }),
         );
-      const keep = (
-        store.sql
-          .prepare(
-            "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 2",
-          )
-          .all(region) as { id: string }[]
-      ).map((r) => r.id);
-      if (keep.length === 2)
-        store.sql
-          .prepare(
-            "DELETE FROM market_orders WHERE generation IN (SELECT id FROM market_snapshot_runs WHERE region_id=?) AND generation NOT IN (?,?)",
-          )
-          .run(region, keep[0], keep[1]);
+      store.sql
+        .prepare(
+          "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
+        )
+        .run(
+          new Date(clock()).toISOString(),
+          first.modified,
+          new Date(expiry).toISOString(),
+          "complete",
+          first.pages,
+          id,
+        );
     })();
+
+    const keep = (
+      store.sql
+        .prepare(
+          "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 2",
+        )
+        .all(region) as { id: string }[]
+    ).map((r) => r.id);
+    if (keep.length === 2) {
+      try {
+        const obsolete = store.sql
+          .prepare(
+            "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' AND id NOT IN (?,?)",
+          )
+          .all(region, keep[0], keep[1]) as { id: string }[];
+        const deleteBatch = store.sql.prepare(
+          "DELETE FROM market_orders WHERE generation=? AND id IN (SELECT id FROM market_orders WHERE generation=? LIMIT ?)",
+        );
+        for (const old of obsolete) {
+          let deleted: number;
+          do {
+            deleted = deleteBatch.run(old.id, old.id, batchSize).changes;
+            if (deleted)
+              await new Promise<void>((resolve) => setImmediate(resolve));
+          } while (deleted === batchSize);
+          store.sql
+            .prepare("DELETE FROM market_snapshot_runs WHERE id=?")
+            .run(old.id);
+        }
+      } catch {
+        // Retention is best-effort. The just-completed generation is already
+        // valid and must remain available if pruning an old one fails.
+      }
+    }
     return { id, count: orders.length, expires: expiry };
   } catch (error) {
+    const deleteBatch = store.sql.prepare(
+      "DELETE FROM market_orders WHERE generation=? AND id IN (SELECT id FROM market_orders WHERE generation=? LIMIT 1000)",
+    );
+    while (deleteBatch.run(id, id).changes === 1000)
+      await new Promise<void>((resolve) => setImmediate(resolve));
     store.sql
       .prepare("UPDATE market_snapshot_runs SET status='failed' WHERE id=?")
       .run(id);

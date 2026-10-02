@@ -49,6 +49,50 @@ it("stage 3: atomic generations, failed page leaves previous data intact", async
     s.close();
   }
 });
+it("yields between market-order batches while preserving atomic generations", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  const bulk = Array.from({ length: 2500 }, (_, index) =>
+    order(index + 1),
+  );
+  const client = new EsiClient(async () =>
+    new Response(JSON.stringify(bulk), {
+      headers: {
+        "X-Pages": "1",
+        "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+        "Cache-Control": "max-age=1",
+      },
+    }),
+  );
+  try {
+    const initial = new EsiClient(async () =>
+      new Response(JSON.stringify([order(3000)]), {
+        headers: {
+          "X-Pages": "1",
+          "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+          "Cache-Control": "max-age=1",
+        },
+      }),
+    );
+    await syncRegion(s, initial, "1");
+    let timerRan = false;
+    let visibleDuringSync = 0;
+    const timer = new Promise<void>((resolve) =>
+      setTimeout(() => {
+        visibleDuringSync = latestOrders(s, ["1"]).orders.length;
+        timerRan = true;
+        resolve();
+      }, 0),
+    );
+    const sync = syncRegion(s, client, "1");
+    await timer;
+    expect(timerRan).toBe(true);
+    expect(visibleDuringSync).toBe(1);
+    await sync;
+    expect(latestOrders(s, ["1"]).orders).toHaveLength(2500);
+  } finally {
+    s.close();
+  }
+});
 it("cache expiry, 304 no new content, rate limit retry header", async () => {
   let now = 0,
     calls = 0;
