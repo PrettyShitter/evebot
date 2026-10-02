@@ -29,7 +29,9 @@ function calculate() {
   const settings = store.getSettings();
   const structural = {
     ...settings,
-    minProfit: "0",
+    // Keep the user's profit floor in the expensive scan. A lower value changes
+    // the candidate universe and therefore must invalidate the cached result.
+    minProfit: settings.minProfit,
     minTripProfit: "0",
     roiEnabled: false,
     minROI: 0,

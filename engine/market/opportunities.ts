@@ -202,6 +202,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const windows = new Map<string, Opportunity["historyWindows"]>();
   const result: Opportunity[] = [];
   const maxCargoVolume = D("100000");
+  const minimumProfit = D(settings.minProfit);
   for (const [typeId, sources] of asks) {
     const type = types.get(typeId)!;
     // Do not recommend items with unknown/oversized packaged volume. Cap every
@@ -246,9 +247,11 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
         targetAsks: Level[];
         bestBid: Decimal;
         bestAsk: Decimal;
+        demandQuantity: number;
         fee: ReturnType<typeof rates>;
         target: string;
         sellRate: Decimal;
+        sortedAsks: Level[];
       } | null
     >();
     const minimumReturn = D(1).plus(
@@ -258,6 +261,11 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
       const source = stations.get(sourceId)!;
       const lowest = bestAsks.get(sourceId)!;
       if (lowest.lte(0)) continue;
+      const sourceQuantity = supply.reduce(
+        (total, level) => total + level.quantity,
+        0,
+      );
+      const requiredNetPrice = lowest.mul(minimumReturn);
       for (const destinationId of destinations) {
         if (sourceId === destinationId) continue;
         const destination = stations.get(destinationId)!;
@@ -271,6 +279,8 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           const fee = rates(profile);
           const bestBid = bestBids.get(destinationId) ?? D(0);
           const bestAsk = bestAsks.get(destinationId) ?? D(0);
+          const demand = bids.get(typeId)?.get(destinationId) ?? [];
+          const targetAsks = sources.get(destinationId) ?? [];
           const sellRate = fee.tax.plus(fee.broker).plus(
             D(1)
               .minus(fee.discount)
@@ -278,8 +288,12 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
               .mul(settings.relistPerDay * 3),
           );
           terms = {
-            demand: bids.get(typeId)?.get(destinationId) ?? [],
-            targetAsks: sources.get(destinationId) ?? [],
+            demand,
+            targetAsks,
+            demandQuantity: demand.reduce(
+              (total, level) => total + level.quantity,
+              0,
+            ),
             bestBid,
             bestAsk,
             fee,
@@ -287,19 +301,52 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
               ? tickBelow(bestAsk.toFixed())
               : bestBid.toFixed(),
             sellRate,
+            sortedAsks: [...targetAsks].sort((a, b) =>
+              D(a.price).comparedTo(b.price),
+            ),
           };
           termsByDestination.set(destinationId, terms);
         }
         if (!terms) continue;
-        const { demand, targetAsks, bestBid, fee, target, sellRate } =
-          terms;
-        const requiredNetPrice = lowest.mul(minimumReturn);
-        const buyPossible = bestBid
+        const {
+          demand,
+          targetAsks,
+          bestBid,
+          fee,
+          target,
+          sellRate,
+          demandQuantity,
+          sortedAsks,
+        } = terms;
+        let buyPossible = bestBid
           .mul(D(1).minus(fee.tax))
           .gte(requiredNetPrice);
-        const sellPossible = D(target)
+        let sellPossible = D(target)
           .mul(D(1).minus(sellRate))
           .gte(requiredNetPrice);
+        // Bound the best possible gross profit before depth walks, history reads,
+        // and liquidity scoring. These bounds intentionally use the cheapest
+        // ask and best bid, so pruning cannot hide a qualifying candidate.
+        const maxLot = Math.min(
+          cargoLimit,
+          sourceQuantity,
+          Decimal.max(0, allowance.div(lowest).floor()).toNumber(),
+        );
+        if (buyPossible) {
+          const buyQty = Math.min(maxLot, demandQuantity);
+          const maximumBuyProfit = bestBid
+            .mul(D(1).minus(fee.tax))
+            .minus(lowest)
+            .mul(buyQty);
+          buyPossible = maximumBuyProfit.gte(minimumProfit);
+        }
+        if (sellPossible) {
+          const maximumSellProfit = D(target)
+            .mul(D(1).minus(sellRate))
+            .minus(lowest)
+            .mul(maxLot);
+          sellPossible = maximumSellProfit.gte(minimumProfit);
+        }
         // Skip route pairs before history, liquidity, and depth calculations
         // unless at least one executable price can meet the configured ROI.
         if (!buyPossible && !sellPossible) continue;
@@ -367,9 +414,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           supply,
           demand,
           sellPrice: target,
-          destinationAsks: [...targetAsks].sort((a, b) =>
-            D(a.price).comparedTo(b.price),
-          ),
+          destinationAsks: sortedAsks,
           liquidity: l,
           historyWindows: windows.get(historyKey)!,
           feeRate: fee.broker.toFixed(),

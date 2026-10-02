@@ -78,7 +78,7 @@ function liveCandidates() {
   const settings = store.getSettings();
   const structural = {
     ...settings,
-    minProfit: "0",
+    minProfit: settings.minProfit,
     minTripProfit: "0",
     roiEnabled: false,
     minROI: 0,
@@ -166,7 +166,7 @@ function candidates() {
   const settings = store.getSettings();
   const structural = {
     ...settings,
-    minProfit: "0",
+    minProfit: settings.minProfit,
     minTripProfit: "0",
     roiEnabled: false,
     minROI: 0,
