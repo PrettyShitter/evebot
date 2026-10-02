@@ -1,20 +1,25 @@
 import { it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import type { StaticData } from "../../engine/market/static-data";
+import {
+  withSearchZone,
+  type StaticData,
+} from "../../engine/market/static-data";
 import { Graph, CENTERS } from "../../engine/routes/graph";
-it("official bundled SDE resolves exact centers, three-jump cross-region NPC universe and ship volume", () => {
-  const data = JSON.parse(
+it("official bundled SDE resolves exact centers and only their NPC stations", () => {
+  const source = JSON.parse(
     readFileSync("resources/static-data.json", "utf8"),
   ) as StaticData;
+  const data = withSearchZone(source);
   const g = new Graph(data.systems);
   expect(CENTERS.map((c) => g.systems.get(c)?.name)).toEqual([
     "Jita",
     "Amarr",
     "Dodixie",
   ]);
-  const zone = g.zone(CENTERS);
+  const zone = new Set(CENTERS);
   expect([...zone].sort()).toEqual([...data.zone].sort());
-  expect(data.regions.length).toBeGreaterThan(3);
+  expect(data.regions).toHaveLength(3);
+  expect(data.stations.length).toBe(26);
   expect(data.stations.every((s) => zone.has(s.systemId))).toBe(true);
   expect(new Set(data.stations.map((s) => s.id)).size).toBe(
     data.stations.length,
@@ -35,7 +40,7 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
   ) as StaticData;
   const graph = new Graph(data.systems),
     oldZone = graph.zone(CENTERS, 5),
-    newZone = graph.zone(CENTERS);
+    newZone = new Set(CENTERS);
   const outside = [...oldZone].find((id) => !newZone.has(id))!;
   const old = {
     ...data,
@@ -62,13 +67,13 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
         "2026-10-02T00:00:00Z",
       );
     const service = new MarketService(store, "resources", false);
-    expect(service.data?.zone.length).toBe(159);
-    expect(service.data?.stations.length).toBe(637);
-    expect(service.data?.regions.length).toBe(11);
+    expect(service.data?.zone.length).toBe(3);
+    expect(service.data?.stations.length).toBe(26);
+    expect(service.data?.regions.length).toBe(3);
     expect(service.data?.stations.some((s) => s.id === "999999999")).toBe(
       false,
     );
-    expect(readStatic(store)?.zone.length).toBe(159);
+    expect(readStatic(store)?.zone.length).toBe(3);
     expect(store.sql.prepare("SELECT id FROM deals").get()).toEqual({
       id: "kept",
     });
@@ -99,7 +104,7 @@ it("startup respects still-valid persisted market snapshot expiry", () => {
         );
     const service = new MarketService(store, "resources", false);
     service.scan();
-    expect(service.scheduler.status).toHaveLength(data.regions.length);
+    expect(service.scheduler.status).toHaveLength(3);
     expect(service.scheduler.status.every((job) => job.due >= Date.now())).toBe(
       true,
     );

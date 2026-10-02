@@ -71,6 +71,7 @@ let calculationBusy = false;
 let calculationAt = 0;
 let calculationError = "";
 let calculationWorker: Worker | undefined;
+let calculationTimer: NodeJS.Timeout | undefined;
 function liveCandidates() {
   if (!market.data) return [];
   const snapshots = latestSnapshots(store, market.data.regions);
@@ -99,11 +100,12 @@ function liveCandidates() {
       .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
       .get(),
   ]);
+  const retryReady =
+    calculationError === "" || Date.now() - calculationAt > 30000;
   if (
     !calculationBusy &&
-    (key !== signature ||
-      filterSignature !== JSON.stringify(settings) ||
-      (calculationError !== "" && Date.now() - calculationAt > 30000))
+    retryReady &&
+    (key !== signature || filterSignature !== JSON.stringify(settings))
   ) {
     calculationBusy = true;
     calculationError = "";
@@ -121,6 +123,8 @@ function liveCandidates() {
           };
           error?: string;
         }) => {
+          clearTimeout(calculationTimer);
+          calculationTimer = undefined;
           calculationBusy = false;
           calculationAt = Date.now();
           if (message.result) {
@@ -135,17 +139,29 @@ function liveCandidates() {
                 store.getSettings().notificationThreshold,
               ),
             ].slice(-20);
-          } else
+          } else {
             calculationError = "Не удалось рассчитать рынок. Повторяем расчёт.";
+          }
         },
       );
       calculationWorker.on("error", () => {
+        clearTimeout(calculationTimer);
+        calculationTimer = undefined;
         calculationBusy = false;
         calculationAt = Date.now();
         calculationError = "Расчёт рынка остановился. Повторяем расчёт.";
         calculationWorker = undefined;
       });
     }
+    const worker = calculationWorker;
+    calculationTimer = setTimeout(() => {
+      if (calculationWorker !== worker || !calculationBusy) return;
+      calculationBusy = false;
+      calculationAt = Date.now();
+      calculationError = "Расчёт рынка превысил лимит времени. Повторим через 30 секунд.";
+      calculationWorker = undefined;
+      void worker?.terminate();
+    }, 120000).unref();
     calculationWorker.postMessage({
       kind:
         key === signature && filterSignature !== JSON.stringify(settings)

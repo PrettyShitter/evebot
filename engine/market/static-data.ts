@@ -1,6 +1,6 @@
 import { unzipSync, strFromU8 } from "fflate";
 import { z } from "zod";
-import { Graph, CENTERS, type System } from "../routes/graph";
+import { CENTERS, type System } from "../routes/graph";
 import { packagedVolume } from "./volume";
 import type { Store } from "../../db/store";
 export interface Station {
@@ -32,7 +32,9 @@ export interface StaticData {
 // Recompute the configured search universe for persisted data from older releases.
 // Retain the full graph and NPC-origin index for routes and ranged buy orders.
 export function withSearchZone(data: StaticData): StaticData {
-  const zone = new Graph(data.systems).zone(CENTERS);
+  // Market scanning is limited to the three hub solar systems. Keep the full
+  // graph so route calculation and buy-order range checks still work globally.
+  const zone = new Set(CENTERS);
   const stations = data.stations.filter((s) => zone.has(s.systemId));
   return {
     ...data,
@@ -108,7 +110,7 @@ export function extractSde(zip: Uint8Array): StaticData {
       if (!b.neighbors.includes(a.id)) b.neighbors.push(a.id);
     }
   }
-  const zone = new Graph(systems).zone(CENTERS);
+  const zone = new Set(CENTERS);
   const corporations = new Map(
     records("npcCorporations.jsonl").map((row) => {
       const c = z
