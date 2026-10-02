@@ -61,6 +61,33 @@ it("stage 3: atomic generations, failed page leaves previous data intact", async
     s.close();
   }
 });
+it("fetches paginated region orders concurrently in a bounded window", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  let active = 0;
+  let maximumActive = 0;
+  const client = new EsiClient(async (input) => {
+    active++;
+    maximumActive = Math.max(maximumActive, active);
+    const page = Number(new URL(String(input)).searchParams.get("page"));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active--;
+    return new Response(JSON.stringify([order(page)]), {
+      headers: {
+        "X-Pages": "9",
+        "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+        "Cache-Control": "max-age=300",
+      },
+    });
+  });
+  try {
+    await syncRegion(s, client, "1");
+    expect(maximumActive).toBeGreaterThan(1);
+    expect(maximumActive).toBeLessThanOrEqual(8);
+    expect(latestOrders(s, ["1"]).orders).toHaveLength(9);
+  } finally {
+    s.close();
+  }
+});
 it("yields between market-order batches while preserving atomic generations", async () => {
   const s = new Store(":memory:", resolve("db/migrations"));
   const bulk = Array.from({ length: 2500 }, (_, index) => ({
@@ -204,6 +231,22 @@ it("scheduler priorities, bounded concurrency, jittered resume and finite retrie
   }
   expect(attempts).toBe(5);
   expect(retries.status.some((j) => j.key === "broken")).toBe(false);
+});
+it("an explicit rescan brings a not-yet-due scheduled market job forward", async () => {
+  const now = 0;
+  const q = new Scheduler(
+    () => now,
+    () => 0,
+    1,
+  );
+  let runs = 0;
+  q.schedule("market:1", 2, 10000, async () => 20000);
+  q.schedule("market:1", 2, now, async () => {
+    runs++;
+    return 20000;
+  });
+  await q.tick();
+  expect(runs).toBe(1);
 });
 it("history missing is unknown and observed days are not fabricated", () => {
   expect(summarize([], 30, "2026-10-02T00:00:00Z")).toBeNull();

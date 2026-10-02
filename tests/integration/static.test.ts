@@ -76,3 +76,41 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
     store.close();
   }
 });
+it("startup respects still-valid persisted market snapshot expiry", () => {
+  const data = JSON.parse(
+    readFileSync("resources/static-data.json", "utf8"),
+  ) as StaticData;
+  const store = new Store(":memory:", "db/migrations");
+  const expiresAt = new Date(Date.now() + 60000).toISOString();
+  try {
+    importStatic(store, data);
+    for (const region of data.regions)
+      store.sql
+        .prepare("INSERT INTO market_snapshot_runs VALUES (?,?,?,?,?,?,?,?)")
+        .run(
+          `snapshot-${region}`,
+          region,
+          new Date().toISOString(),
+          new Date().toISOString(),
+          new Date().toISOString(),
+          expiresAt,
+          "complete",
+          1,
+        );
+    const service = new MarketService(store, "resources", false);
+    service.scan();
+    expect(service.scheduler.status).toHaveLength(data.regions.length);
+    expect(service.scheduler.status.every((job) => job.due >= Date.now())).toBe(
+      true,
+    );
+    expect(
+      service.scheduler.status.every((job) => job.due <= Date.parse(expiresAt)),
+    ).toBe(true);
+    service.scan(true);
+    expect(service.scheduler.status.every((job) => job.due <= Date.now())).toBe(
+      true,
+    );
+  } finally {
+    store.close();
+  }
+});

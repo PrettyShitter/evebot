@@ -22,13 +22,7 @@ export async function syncRegion(
     const orders: Order[] = [];
     let expiry = first.expires;
     const seen = new Set<string>();
-    for (let p = 1; p <= first.pages; p++) {
-      const page =
-        p === 1
-          ? first
-          : await client.get(
-              `/markets/${region}/orders?order_type=all&page=${p}`,
-            );
+    const acceptPage = (page: Awaited<ReturnType<EsiClient["get"]>>) => {
       if (page.pages !== first.pages || page.modified !== first.modified)
         throw Error("Страницы рынка относятся к разным поколениям");
       for (const order of z.array(orderSchema).parse(page.body)) {
@@ -38,6 +32,22 @@ export async function syncRegion(
         orders.push(order);
       }
       expiry = Math.min(expiry, page.expires);
+    };
+    acceptPage(first);
+    // Region order books can span hundreds of pages. Fetch a small bounded
+    // window concurrently so a cold start does not take one RTT per page.
+    const pageConcurrency = 8;
+    for (let start = 2; start <= first.pages; start += pageConcurrency) {
+      const pages = await Promise.all(
+        Array.from(
+          { length: Math.min(pageConcurrency, first.pages - start + 1) },
+          (_, index) =>
+            client.get(
+              `/markets/${region}/orders?order_type=all&page=${start + index}`,
+            ),
+        ),
+      );
+      for (const page of pages) acceptPage(page);
     }
     if (!first.modified) throw Error("ESI не сообщил время снимка");
     const npc = new Set(

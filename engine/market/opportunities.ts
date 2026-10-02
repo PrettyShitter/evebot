@@ -239,6 +239,21 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
       ]),
     );
     const liquidities = new Map<string, ReturnType<typeof liquidity>>();
+    const termsByDestination = new Map<
+      string,
+      {
+        demand: Level[];
+        targetAsks: Level[];
+        bestBid: Decimal;
+        bestAsk: Decimal;
+        fee: ReturnType<typeof rates>;
+        target: string;
+        sellRate: Decimal;
+      } | null
+    >();
+    const minimumReturn = D(1).plus(
+      settings.roiEnabled ? String(settings.minROI / 100) : "0",
+    );
     for (const [sourceId, supply] of sources) {
       const source = stations.get(sourceId)!;
       const lowest = bestAsks.get(sourceId)!;
@@ -246,23 +261,58 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
       for (const destinationId of destinations) {
         if (sourceId === destinationId) continue;
         const destination = stations.get(destinationId)!;
-        const demand = bids.get(typeId)?.get(destinationId) ?? [];
-        const targetAsks = sources.get(destinationId) ?? [];
-        const bestBid = bestBids.get(destinationId) ?? D(0);
-        const bestAsk = bestAsks.get(destinationId) ?? D(0);
-        if (bestBid.lte(lowest) && bestAsk.lte(lowest)) continue;
-        const profile = profiles.get(destinationId);
-        if (!profile) continue;
-        const fee = rates(profile);
-        // Gross spreads that cannot cover even tax/listing costs cannot yield a profitable level.
-        if (
-          bestBid.mul(D(1).minus(fee.tax)).lt(lowest) &&
-          bestAsk.mul(D(1).minus(fee.tax).minus(fee.broker)).lt(lowest)
-        )
-          continue;
-        const target = bestAsk.gt(0)
-          ? tickBelow(bestAsk.toFixed())
-          : bestBid.toFixed();
+        let terms = termsByDestination.get(destinationId);
+        if (terms === undefined) {
+          const profile = profiles.get(destinationId);
+          if (!profile) {
+            termsByDestination.set(destinationId, null);
+            continue;
+          }
+          const fee = rates(profile);
+          const bestBid = bestBids.get(destinationId) ?? D(0);
+          const bestAsk = bestAsks.get(destinationId) ?? D(0);
+          const sellRate = fee.tax.plus(fee.broker).plus(
+            D(1)
+              .minus(fee.discount)
+              .mul(fee.broker)
+              .mul(settings.relistPerDay * 3),
+          );
+          terms = {
+            demand: bids.get(typeId)?.get(destinationId) ?? [],
+            targetAsks: sources.get(destinationId) ?? [],
+            bestBid,
+            bestAsk,
+            fee,
+            target: bestAsk.gt(0)
+              ? tickBelow(bestAsk.toFixed())
+              : bestBid.toFixed(),
+            sellRate,
+          };
+          termsByDestination.set(destinationId, terms);
+        }
+        if (!terms) continue;
+        const { demand, targetAsks, bestBid, fee, target, sellRate } =
+          terms;
+        const requiredNetPrice = lowest.mul(minimumReturn);
+        const buyPossible = bestBid
+          .mul(D(1).minus(fee.tax))
+          .gte(requiredNetPrice);
+        const sellPossible = D(target)
+          .mul(D(1).minus(sellRate))
+          .gte(requiredNetPrice);
+        // Skip route pairs before history, liquidity, and depth calculations
+        // unless at least one executable price can meet the configured ROI.
+        if (!buyPossible && !sellPossible) continue;
+        const buyQ = buyPossible
+          ? profitableQuantity(
+              supply,
+              demand,
+              allowance.toFixed(),
+              fee.tax.toFixed(),
+              settings.roiEnabled ? String(settings.minROI / 100) : "0",
+            )
+          : 0;
+        if (!buyQ && !sellPossible) continue;
         const localBidQty = demand.reduce((s, l) => s + l.quantity, 0);
         const historyKey = typeId + ":" + destination.regionId;
         if (!histories.has(historyKey))
@@ -295,28 +345,16 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
             month: summarize(history, 30, input.at),
             quarter: summarize(history, 90, input.at),
           });
-        const buyQ = profitableQuantity(
-          supply,
-          demand,
-          allowance.toFixed(),
-          fee.tax.toFixed(),
-          settings.roiEnabled ? String(settings.minROI / 100) : "0",
-        );
-        const sellRate = fee.tax.plus(fee.broker).plus(
-          D(1)
-            .minus(fee.discount)
-            .mul(fee.broker)
-            .mul(settings.relistPerDay * 3),
-        );
-        const sellQ = l.sellQuantity
-          ? profitableQuantity(
-              supply,
-              [{ id: "forecast", price: target, quantity: l.sellQuantity }],
-              allowance.toFixed(),
-              sellRate.toFixed(),
-              settings.roiEnabled ? String(settings.minROI / 100) : "0",
-            )
-          : 0;
+        const sellQ =
+          sellPossible && l.sellQuantity
+            ? profitableQuantity(
+                supply,
+                [{ id: "forecast", price: target, quantity: l.sellQuantity }],
+                allowance.toFixed(),
+                sellRate.toFixed(),
+                settings.roiEnabled ? String(settings.minROI / 100) : "0",
+              )
+            : 0;
         let quantity = Math.min(cargoLimit, Math.max(buyQ, sellQ));
         if (quantity <= 0) continue;
         const base = {

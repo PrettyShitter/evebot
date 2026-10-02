@@ -39,6 +39,9 @@ function calculate() {
   };
   const key = JSON.stringify([
     snapshots.map((s) => s.id),
+    store.sql
+      .prepare("SELECT value FROM sync_cursors WHERE key='history-revision'")
+      .get(),
     structural,
     budget,
     [...trades.exposures()],

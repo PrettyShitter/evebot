@@ -88,6 +88,9 @@ function liveCandidates() {
   };
   const key = JSON.stringify([
     snapshots.map((s) => s.id),
+    store.sql
+      .prepare("SELECT value FROM sync_cursors WHERE key='history-revision'")
+      .get(),
     structural,
     budget,
     [...trades.exposures()],
@@ -100,7 +103,7 @@ function liveCandidates() {
     !calculationBusy &&
     (key !== signature ||
       filterSignature !== JSON.stringify(settings) ||
-      Date.now() - calculationAt > 30000)
+      (calculationError !== "" && Date.now() - calculationAt > 30000))
   ) {
     calculationBusy = true;
     calculationError = "";
@@ -442,7 +445,7 @@ parentPort!.on(
       }
       if (request.kind === "deal.cancel") trades.cancel(request.id);
       if (request.kind === "deal.route") trades.route(request.id, request.mode);
-      if (request.kind === "market.sync") market.scan();
+      if (request.kind === "market.sync") market.scan(true);
       if (request.kind === "static.update")
         void market.updateStatic().catch(() => {});
       if (request.kind === "settings.save") store.saveSettings(request.value);

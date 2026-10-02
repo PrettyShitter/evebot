@@ -15,7 +15,16 @@ export class Scheduler {
     readonly concurrency = 2,
   ) {}
   schedule(key: string, priority: number, due: number, run: Job["run"]) {
-    if (this.jobs.has(key) || this.running.has(key)) return;
+    const prior = this.jobs.get(key);
+    if (prior) {
+      if (due < prior.due) {
+        prior.due = due;
+        prior.priority = Math.min(prior.priority, priority);
+        prior.run = run;
+      }
+      return;
+    }
+    if (this.running.has(key)) return;
     this.jobs.set(key, { key, priority, due, run, attempts: 0 });
   }
   suspend() {

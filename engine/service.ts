@@ -47,28 +47,44 @@ export class MarketService {
       )
       .run();
   }
-  scan() {
+  scan(force = false) {
     if (this.demo) return;
     if (!this.data) throw Error("Справочник отсутствует");
+    const snapshots = new Map(
+      latestSnapshots(this.store, this.data.regions).map((snapshot) => [
+        snapshot.region,
+        snapshot,
+      ]),
+    );
     for (const region of this.data.regions)
-      this.scheduler.schedule("market:" + region, 2, Date.now(), async () => {
-        this.status = "Загрузка рынка региона " + region;
-        try {
-          const r = await syncRegion(
-            this.store,
-            this.client,
-            region,
-            Date.now,
-            this.searchLocations,
-          );
-          this.status = "Рынок обновлён; история загружается отдельно";
-          this.queueHistory(region);
-          return r.expires;
-        } catch (e) {
-          this.status = e instanceof Error ? e.message : "Ошибка рынка";
-          throw e;
-        }
-      });
+      this.scheduler.schedule(
+        "market:" + region,
+        2,
+        force
+          ? Date.now()
+          : Math.max(
+              Date.now(),
+              Date.parse(snapshots.get(region)?.expiresAt ?? "") || 0,
+            ),
+        async () => {
+          this.status = "Загрузка рынка региона " + region;
+          try {
+            const r = await syncRegion(
+              this.store,
+              this.client,
+              region,
+              Date.now,
+              this.searchLocations,
+            );
+            this.status = "Рынок обновлён; история загружается отдельно";
+            this.queueHistory(region);
+            return r.expires;
+          } catch (e) {
+            this.status = e instanceof Error ? e.message : "Ошибка рынка";
+            throw e;
+          }
+        },
+      );
   }
   private queueHistory(region: string) {
     const generation = latestSnapshots(this.store, [region])[0];
