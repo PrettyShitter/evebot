@@ -186,7 +186,11 @@ function candidates() {
   ]);
   if (key === signature) return filtered();
   signature = key;
-  const snapshot = latestOrders(store, market.data.regions);
+  const snapshot = latestOrders(
+    store,
+    market.data.regions,
+    new Set(market.data.stations.map((station) => station.id)),
+  );
   const raw = store.sql
     .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
     .get() as { value: string } | undefined;
@@ -394,9 +398,11 @@ parentPort!.on(
         });
         if (
           !config.demo &&
-          latestOrders(store, market.data?.regions ?? []).snapshots.some(
-            (s) => Date.parse(s.expiresAt) < Date.now(),
-          )
+          latestOrders(
+            store,
+            market.data?.regions ?? [],
+            new Set(market.data?.stations.map((station) => station.id) ?? []),
+          ).snapshots.some((s) => Date.parse(s.expiresAt) < Date.now())
         )
           throw Error("Снимок устарел. Дождитесь обновления рынка.");
         trades.accept(request.id, items, request.parentId);

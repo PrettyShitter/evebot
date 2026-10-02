@@ -197,13 +197,25 @@ export function latestSnapshots(store: Store, regions: string[]) {
   }
   return snapshots;
 }
-export function latestOrders(store: Store, regions: string[]) {
+export function latestOrders(
+  store: Store,
+  regions: string[],
+  allowedLocations?: ReadonlySet<string>,
+) {
   const snapshots = latestSnapshots(store, regions);
   const orders: Order[] = [];
+  const locations = allowedLocations ? [...allowedLocations] : null;
+  if (locations?.length === 0)
+    return { orders, snapshots, complete: snapshots.length === regions.length };
+  const statement = locations
+    ? store.sql.prepare(
+        `SELECT payload FROM market_orders WHERE generation=? AND location_id IN (${locations.map(() => "?").join(",")})`,
+      )
+    : store.sql.prepare("SELECT payload FROM market_orders WHERE generation=?");
   for (const row of snapshots)
-    for (const o of store.sql
-      .prepare("SELECT payload FROM market_orders WHERE generation=?")
-      .all(row.id) as { payload: string }[])
+    for (const o of statement.all(row.id, ...(locations ?? [])) as {
+      payload: string;
+    }[])
       orders.push(JSON.parse(o.payload));
   return { orders, snapshots, complete: snapshots.length === regions.length };
 }

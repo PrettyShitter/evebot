@@ -27,19 +27,31 @@ it("stage 3: atomic generations, failed page leaves previous data intact", async
     async (input) => {
       const page = new URL(String(input)).searchParams.get("page");
       if (fail && page === "2") return new Response("", { status: 503 });
-      return new Response(JSON.stringify([order(page === "1" ? 1 : 2)]), {
-        headers: {
-          "X-Pages": "2",
-          "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
-          "Cache-Control": "max-age=1",
+      return new Response(
+        JSON.stringify([
+          {
+            ...order(page === "1" ? 1 : 2),
+            location_id: page === "1" ? 60003760 : 60003761,
+          },
+        ]),
+        {
+          headers: {
+            "X-Pages": "2",
+            "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+            "Cache-Control": "max-age=1",
+          },
         },
-      });
+      );
     },
     () => clock,
   );
   try {
     await syncRegion(s, client, "1", () => clock);
     expect(latestOrders(s, ["1"]).orders).toHaveLength(2);
+    expect(latestOrders(s, ["1"], new Set(["60003760"])).orders).toHaveLength(
+      1,
+    );
+    expect(latestOrders(s, ["1"], new Set(["60003760"])).complete).toBe(true);
     clock = 2000;
     fail = true;
     await expect(syncRegion(s, client, "1", () => clock)).rejects.toThrow();

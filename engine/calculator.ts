@@ -47,7 +47,11 @@ function calculate() {
       .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
       .get(),
   ]);
-  const snapshot = latestOrders(store, market.data.regions);
+  const snapshot = latestOrders(
+    store,
+    market.data.regions,
+    new Set(market.data.stations.map((station) => station.id)),
+  );
   const raw = store.sql
     .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
     .get() as { value: string } | undefined;
