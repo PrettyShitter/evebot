@@ -33,6 +33,8 @@ let walletError = "";
 let window: BrowserWindow;
 let worker: Worker;
 let demo = process.env.EVE_DEMO === "1";
+const ENGINE_REQUEST_TIMEOUT_MS = 30_000;
+const UPDATE_BACKUP_TIMEOUT_MS = 10 * 60_000;
 const pending = new Map<
   string,
   {
@@ -72,13 +74,14 @@ function requestEngine(
   request: unknown,
   backupPath?: string,
   internal?: unknown,
+  timeoutMs = ENGINE_REQUEST_TIMEOUT_MS,
 ) {
   return new Promise<AppState>((resolve, reject) => {
     const id = crypto.randomUUID();
     const timer = setTimeout(() => {
       pending.delete(id);
       reject(new Error("Движок не ответил вовремя"));
-    }, 30000);
+    }, timeoutMs);
     pending.set(id, { resolve, reject, timer });
     worker.postMessage({ id, request, backupPath, internal });
   });
@@ -134,6 +137,8 @@ app.whenReady().then(async () => {
         await requestEngine(
           { kind: "backup" },
           join(directory, demo ? "demo.sqlite" : "portfolio.sqlite"),
+          undefined,
+          UPDATE_BACKUP_TIMEOUT_MS,
         );
         const other = join(
           app.getPath("userData"),
