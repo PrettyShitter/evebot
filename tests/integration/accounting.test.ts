@@ -84,26 +84,26 @@ it("stage 7: explicit buy binding, alt delivery review, partial FIFO, button, ex
     expect(closed.status).toBe("CLOSED");
     expect(closed.result.cost).toBe("2200.00");
     expect(closed.result.revenue).toBe("3000.00");
+    expect(closed.result.netProceeds).toBe("2700.00");
     expect(closed.result.profit).toBe("500.00");
     r.run("deal");
     expect(t.list()[0].result.profit).toBe("500.00");
-    s.sql
-      .prepare("INSERT INTO wallet_journal VALUES (?,?,?,?)")
-      .run(
-        "90000001",
-        "93",
-        JSON.stringify({
-          ...journal("93", "-20"),
-          ref_type: "brokers_fee",
-          context_id: "4",
-        }),
-        now,
-      );
+    s.sql.prepare("INSERT INTO wallet_journal VALUES (?,?,?,?)").run(
+      "90000001",
+      "93",
+      JSON.stringify({
+        ...journal("93", "-20"),
+        ref_type: "brokers_fee",
+        context_id: "4",
+      }),
+      now,
+    );
     r.run();
     expect(t.list()[0].status).toBe("NEEDS_REVIEW");
     r.confirmExpenses("deal");
     r.run();
     expect(t.list()[0].result.profit).toBe("480.00");
+    expect(t.list()[0].result.netProceeds).toBe("2700.00");
     expect(
       D(t.list()[0].result.revenue)
         .minus(t.list()[0].result.cost)

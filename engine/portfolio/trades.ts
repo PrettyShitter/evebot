@@ -28,6 +28,7 @@ export interface DealView {
     roi: string | null;
     cost: string;
     revenue: string;
+    netProceeds: string | null;
     fees: string;
     sold: number;
     purchased: number;
@@ -286,9 +287,19 @@ export class Trades {
       const fees = this.store.sql
         .prepare("SELECT amount FROM fee_allocations WHERE deal_id=?")
         .all(d.id) as { amount: string }[];
+      const saleTaxes = this.store.sql
+        .prepare(
+          "SELECT f.amount,j.payload FROM fee_allocations f JOIN wallet_journal j ON j.character_id=f.character_id AND j.id=f.journal_id WHERE f.deal_id=?",
+        )
+        .all(d.id) as { amount: string; payload: string }[];
       const cost = sum(sales.map((s) => s.cost)),
         revenue = sum(sales.map((s) => s.proceeds)),
         fee = sum(fees.map((f) => f.amount));
+      const saleTax = sum(
+        saleTaxes
+          .filter((f) => JSON.parse(f.payload).ref_type === "transaction_tax")
+          .map((f) => f.amount),
+      );
       const purchased = lots.reduce((s, l) => s + l.quantity, 0),
         remaining = lots.reduce((s, l) => s + l.remaining, 0),
         sold = sales.reduce((s, l) => s + l.quantity, 0);
@@ -318,6 +329,7 @@ export class Trades {
               : null,
           cost: isk(cost),
           revenue: isk(revenue),
+          netProceeds: exact ? isk(revenue.minus(saleTax)) : null,
           fees: isk(fee),
           profit: exact
             ? isk(

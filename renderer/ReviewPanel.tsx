@@ -141,6 +141,14 @@ export function ReviewPanel({
           Выручка<strong>{money(deal.result.revenue, 2)} ISK</strong>
         </span>
         <span>
+          Поступило после налога
+          <strong>
+            {deal.result.netProceeds === null
+              ? "Ожидает сверки налога"
+              : `${money(deal.result.netProceeds, 2)} ISK`}
+          </strong>
+        </span>
+        <span>
           Распределённые расходы
           <strong>{money(deal.result.fees, 2)} ISK</strong>
         </span>

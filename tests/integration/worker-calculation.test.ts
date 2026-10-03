@@ -12,16 +12,14 @@ it("live engine responds while a separate readonly calculator runs and recompute
   const dir = mkdtempSync(resolve(".cache/worker-test-"));
   const db = new Store(join(dir, "portfolio.sqlite"), resolve("db/migrations"));
   seedDemo(db);
-  db.sql
-    .prepare("INSERT INTO sync_cursors VALUES ('seller-profile',?)")
-    .run(
-      JSON.stringify({
-        skills: [],
-        standings: [],
-        queue: [],
-        at: new Date().toISOString(),
-      }),
-    );
+  db.sql.prepare("INSERT INTO sync_cursors VALUES ('seller-profile',?)").run(
+    JSON.stringify({
+      skills: [],
+      standings: [],
+      queue: [],
+      at: new Date().toISOString(),
+    }),
+  );
   db.close();
   await build({
     entryPoints: {
@@ -67,12 +65,30 @@ it("live engine responds while a separate readonly calculator runs and recompute
     const beforeFilter = state.market.calculation.revision;
     state = await request({
       kind: "settings.save",
-      value: { ...state.settings, minProfit: "999999999999" },
+      value: {
+        ...state.settings,
+        sort: state.settings.sort === "best" ? "buy" : "best",
+      },
     });
     expect(state.market.calculation.busy).toBe(true);
     expect(state.market.calculation.phase).toBe("Применение фильтров");
     expect(state.market.calculation.revision).toBe(beforeFilter);
     expect(state.opportunities.length).toBeGreaterThan(0);
+    const shownOffer = state.opportunities[0];
+    const selectedState = await request({
+      kind: "deal.accept",
+      id: "5d3775d5-9b66-4a67-a728-92784fb44836",
+      items: [{ id: shownOffer.id, quantity: shownOffer.quantity }],
+    });
+    expect(
+      selectedState.deals.some(
+        (deal) => deal.id === "5d3775d5-9b66-4a67-a728-92784fb44836",
+      ),
+    ).toBe(true);
+    state = await request({
+      kind: "settings.save",
+      value: { ...state.settings, minProfit: "999999999999" },
+    });
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 20));
       state = await request({ kind: "state" });

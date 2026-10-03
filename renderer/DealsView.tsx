@@ -157,6 +157,11 @@ export function DealsView({
                 Остаток<strong>{d.result.remaining} шт.</strong>
               </span>
               <span>
+                Поступило после налога
+                <strong>{money(d.result.netProceeds, 2)} ISK</strong>
+                {d.result.netProceeds === null && "Ожидает сверки продажи"}
+              </span>
+              <span>
                 Фактическая прибыль
                 <strong className={signClass(d.result.profit)}>
                   {money(d.result.profit, 2)} ISK

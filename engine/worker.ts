@@ -133,7 +133,9 @@ function liveCandidates() {
     calculationProgress = {
       ...calculationProgress,
       busy: true,
-      phase: mustCalculate ? "Подготовка стаканов трёх хабов" : "Применение фильтров",
+      phase: mustCalculate
+        ? "Подготовка стаканов трёх хабов"
+        : "Применение фильтров",
       processed: 0,
       total: 0,
       startedAt: Date.now(),
@@ -218,7 +220,8 @@ function liveCandidates() {
       if (calculationWorker !== worker || !calculationBusy) return;
       calculationBusy = false;
       calculationAt = Date.now();
-      calculationError = "Расчёт рынка превысил лимит времени. Повторим через 30 секунд.";
+      calculationError =
+        "Расчёт рынка превысил лимит времени. Повторим через 30 секунд.";
       calculationProgress = {
         ...calculationProgress,
         busy: false,
@@ -493,23 +496,26 @@ parentPort!.on(
         request.kind === "deal.accept" &&
         !store.sql.prepare("SELECT id FROM deals WHERE id=?").get(request.id)
       ) {
-        if (calculationBusy)
-          throw Error("Рынок обновляется. Повторите принятие через несколько секунд.");
+        // Keep accepting an offer that was already shown to the user while a
+        // background scan is running. A selected offer is a forecast, not an
+        // order execution, so an expired snapshot must not prevent recording
+        // the plan; actual fills are reconciled from wallet transactions.
         const current = candidates();
         const items = request.items.map((item) => {
-          const o = current.find((x) => x.id === item.id);
+          const o =
+            current.find((x) => x.id === item.id) ??
+            cached.find((x) => x.id === item.id) ??
+            (() => {
+              const saved = store.sql
+                .prepare(
+                  "SELECT payload FROM opportunities WHERE json_extract(payload,'$.id')=? ORDER BY at DESC LIMIT 1",
+                )
+                .get(item.id) as { payload: string } | undefined;
+              return saved ? (JSON.parse(saved.payload) as Opportunity) : null;
+            })();
           if (!o) throw Error("Предложение больше не соответствует фильтрам");
           return selectQuantity(o, item.quantity);
         });
-        if (
-          !config.demo &&
-          latestOrders(
-            store,
-            market.data?.regions ?? [],
-            new Set(market.data?.stations.map((station) => station.id) ?? []),
-          ).snapshots.some((s) => Date.parse(s.expiresAt) < Date.now())
-        )
-          throw Error("Снимок устарел. Дождитесь обновления рынка.");
         trades.accept(request.id, items, request.parentId);
       }
       if (request.kind === "deal.reconcile") reconciler.run(request.id);
