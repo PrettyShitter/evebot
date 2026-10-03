@@ -360,11 +360,18 @@ function App() {
                   />
                 </label>
                 <label className="field">
-                  Минимальная прибыль рейса, ISK
+                  Минимальный ROI, %
                   <Input
-                    value={draft.minTripProfit}
+                    type="number"
+                    min="0"
+                    max="10000"
+                    value={draft.minROI}
                     onChange={(e) =>
-                      setDraft({ ...draft, minTripProfit: e.target.value })
+                      setDraft({
+                        ...draft,
+                        minROI: Number(e.target.value),
+                        roiEnabled: true,
+                      })
                     }
                   />
                 </label>

@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-02T09:32:19.290Z",
+  "at": "2026-10-03T08:39:28.225Z",
   "machine": {
     "platform": "darwin",
     "arch": "arm64",
@@ -10,6 +10,7 @@
     "file": ".cache/the-forge-orders.json",
     "region": "10000002",
     "orders": 404495,
+    "scopedOrders": 328233,
     "snapshot": [
       {
         "region": "10000002",
@@ -19,12 +20,13 @@
       }
     ]
   },
-  "zoneStations": 1516,
+  "hubSystems": 3,
+  "hubStations": 26,
   "types": 19565,
-  "offers": 765,
-  "scanMs": 2602.1533750000003,
-  "filterMs": 8.525542000000314,
-  "rssMiB": 1019.203125,
-  "peakRssMiB": 1058.828125,
+  "offers": 8,
+  "scanMs": 2297.4602910000003,
+  "filterMs": 0.64325000000008,
+  "rssMiB": 550.4375,
+  "peakRssMiB": 649.8125,
   "scope": "One complete real regional snapshot, buy analysis; no fabricated regional history. Synthetic seller level 5 and 800m ISK budget. Filter benchmark recomputes quantity, fees and ROI against prepared ladders; renderer latency measured separately."
 }

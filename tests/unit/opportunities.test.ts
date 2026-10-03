@@ -105,9 +105,19 @@ describe("scanOpportunities minimum-profit pruning", () => {
 
   it("retains profitable candidates below the configured floor", () => {
     const history = vi.fn(() => []);
-    const result = scanOpportunities(inputs("0", history));
+    const progress = vi.fn();
+    const result = scanOpportunities({
+      ...inputs("0", history),
+      onProgress: progress,
+    });
 
     expect(result).toHaveLength(1);
+    expect(result[0].availableQuantity).toBe(10);
     expect(history).toHaveBeenCalledOnce();
+    expect(progress).toHaveBeenLastCalledWith({
+      phase: "Расчёт цен и доступного объёма по товарам",
+      processed: 1,
+      total: 1,
+    });
   });
 });

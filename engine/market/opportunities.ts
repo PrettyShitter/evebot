@@ -27,6 +27,7 @@ export interface Opportunity {
   source: Station;
   destination: Station;
   quantity: number;
+  availableQuantity: number;
   maximum: number;
   supply: Level[];
   demand: Level[];
@@ -120,6 +121,11 @@ export interface ScanInputs {
   ) => { observations: number; confirmedSales: number };
   at: string;
   snapshotIds: string[];
+  onProgress?: (progress: {
+    phase: string;
+    processed: number;
+    total: number;
+  }) => void;
 }
 export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const { data, orders, settings } = input;
@@ -203,7 +209,22 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const result: Opportunity[] = [];
   const maxCargoVolume = D("100000");
   const minimumProfit = D(settings.minProfit);
-  for (const [typeId, sources] of asks) {
+  const typesToScan = [...asks.keys()];
+  let scanned = 0;
+  input.onProgress?.({
+    phase: "Расчёт цен и доступного объёма по товарам",
+    processed: 0,
+    total: typesToScan.length,
+  });
+  for (const typeId of typesToScan) {
+    const sources = asks.get(typeId)!;
+    scanned++;
+    if (scanned % 8 === 0 || scanned === typesToScan.length)
+      input.onProgress?.({
+        phase: "Расчёт цен и доступного объёма по товарам",
+        processed: scanned,
+        total: typesToScan.length,
+      });
     const type = types.get(typeId)!;
     // Do not recommend items with unknown/oversized packaged volume. Cap every
     // proposed lot as well, so a stack cannot exceed the hauling limit.
@@ -409,6 +430,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           source,
           destination,
           quantity,
+          availableQuantity: Math.min(cargoLimit, sourceQuantity),
           maximum: quantity,
           supply,
           demand,

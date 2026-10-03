@@ -50,12 +50,10 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
       timeout: 25000,
     });
     const uiStarted = await page.evaluate(() => performance.now());
-    await page
-      .getByRole("button", { name: "Высокий ROI", exact: true })
-      .click();
-    await expect(
-      page.getByText(/предложений · прибыль.*ROI ≥ 30%/),
-    ).toBeVisible();
+    const roiFilter = page.getByLabel("Минимальный ROI");
+    await roiFilter.fill("30");
+    await roiFilter.blur();
+    await expect(page.getByText(/предложений · профит от.*ROI от 30%/)).toBeVisible();
     const uiFilterMs =
       (await page.evaluate(() => performance.now())) - uiStarted;
     const metrics = await page.evaluate(async () => {

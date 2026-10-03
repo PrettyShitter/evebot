@@ -60,9 +60,19 @@ export class Store {
       .from(settings)
       .where(eq(settings.key, "app"))
       .get();
-    return { ...DEFAULT_SETTINGS, ...(row ? JSON.parse(row.value) : {}) };
+    return {
+      ...DEFAULT_SETTINGS,
+      ...(row ? JSON.parse(row.value) : {}),
+      minTripProfit: "0",
+      roiEnabled: true,
+    };
   }
   saveSettings(value: Settings) {
+    const normalized = {
+      ...value,
+      minTripProfit: "0",
+      roiEnabled: true,
+    };
     this.sql.transaction(() => {
       const prior = this.orm
         .select()
@@ -73,13 +83,13 @@ export class Store {
         .insert(settings)
         .values({
           key: "app",
-          value: JSON.stringify(value),
+          value: JSON.stringify(normalized),
           version: (prior?.version ?? 0) + 1,
         })
         .onConflictDoUpdate({
           target: settings.key,
           set: {
-            value: JSON.stringify(value),
+            value: JSON.stringify(normalized),
             version: (prior?.version ?? 0) + 1,
           },
         })
@@ -89,7 +99,7 @@ export class Store {
         .run(
           crypto.randomUUID(),
           new Date().toISOString(),
-          JSON.stringify(value),
+          JSON.stringify(normalized),
         );
     })();
   }

@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-02T18:03:46.709Z
+UTC: 2026-10-03T09:09:35.728Z
 
-Commit: 548d8231b8f087a16511899baeab2443d837079e; проверяется рабочее дерево.
+Commit: c5c5425a4934d15d8090417c6c5d78b5452e3ce3; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -31,10 +31,10 @@ Exit code: 0; PASS
  RUN  v5.0.3 /Users/wozglas/Documents/ChatGPT/eve online bot
 
 
- Test Files  6 passed (6)
-      Tests  30 passed (30)
-   Start at  01:03:49
-   Duration  181ms (import 48%, transform 35%, tests 14%, worker 3%)
+ Test Files  8 passed (8)
+      Tests  34 passed (34)
+   Start at  16:09:43
+   Duration  432ms (transform 45%, import 40%, tests 11%, worker 4%)
 
 $ vitest run tests/unit
 
@@ -51,8 +51,8 @@ Exit code: 0; PASS
 
  Test Files  12 passed (12)
       Tests  28 passed (28)
-   Start at  01:03:50
-   Duration  2.42s (import 55%, tests 39%, transform 6%)
+   Start at  16:09:44
+   Duration  3.42s (import 62%, tests 31%, transform 7%)
 
 $ vitest run tests/integration
 
@@ -65,14 +65,14 @@ Exit code: 0; PASS
 ```text
 vite v8.3.2 building client environment for production...
 transforming...
-✓ 2066 modules transformed.
+✓ 2067 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/renderer/index.html                   0.61 kB │ gzip:   0.38 kB
-dist/renderer/assets/index-PMQcMmE_.css   23.67 kB │ gzip:   5.39 kB
-dist/renderer/assets/index-BdAG-byW.js   436.02 kB │ gzip: 137.98 kB
+dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
+dist/renderer/assets/index-ZTF8dGLQ.css   23.83 kB │ gzip:   5.44 kB
+dist/renderer/assets/index-DxjkGlfU.js   435.24 kB │ gzip: 137.96 kB
 
-✓ built in 139ms
+✓ built in 271ms
 $ node scripts/build.mjs
 
 ```
@@ -85,15 +85,15 @@ Exit code: 0; PASS
 
 Running 4 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (1.8s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (1.2s)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (3.2s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (1.6s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (1.3s)
+  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (2.4s)
 
   1 skipped
-  3 passed (5.0s)
+  3 passed (8.5s)
 $ playwright test
-(node:5198) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:28060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```

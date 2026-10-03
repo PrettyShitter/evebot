@@ -60,10 +60,19 @@ it("live engine responds while a separate readonly calculator runs and recompute
       state = await request({ kind: "state" });
     }
     expect(state.opportunities.length).toBeGreaterThan(0);
-    await request({
+    expect(state.market.calculation.total).toBeGreaterThan(0);
+    expect(state.market.calculation.processed).toBe(
+      state.market.calculation.total,
+    );
+    const beforeFilter = state.market.calculation.revision;
+    state = await request({
       kind: "settings.save",
       value: { ...state.settings, minProfit: "999999999999" },
     });
+    expect(state.market.calculation.busy).toBe(true);
+    expect(state.market.calculation.phase).toBe("Применение фильтров");
+    expect(state.market.calculation.revision).toBe(beforeFilter);
+    expect(state.opportunities.length).toBeGreaterThan(0);
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 20));
       state = await request({ kind: "state" });
@@ -71,6 +80,7 @@ it("live engine responds while a separate readonly calculator runs and recompute
     }
     expect(state.opportunities).toHaveLength(0);
     expect(state.market.status).not.toContain("Расчёт");
+    expect(state.market.calculation.revision).toBeGreaterThan(beforeFilter);
   } finally {
     await worker.terminate();
     rmSync(dir, { recursive: true, force: true });

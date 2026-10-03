@@ -22,8 +22,7 @@ test("stage 5: filters, quantity quote, basket and idempotent acceptance", async
     ).toBeVisible();
     const rows = page.locator(".data-row");
     await expect(rows.first()).toBeVisible();
-    await page.getByRole("button", { name: "Все фильтры" }).click();
-    const min = page.getByLabel("Фильтр прибыль");
+    const min = page.getByLabel("Минимальный профит предложения");
     await min.fill("999999999999");
     await min.blur();
     await expect(

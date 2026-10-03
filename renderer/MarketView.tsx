@@ -14,11 +14,11 @@ import {
   ShoppingBasket,
   ArrowUpRight,
   RefreshCw,
-  SlidersHorizontal,
   X,
 } from "lucide-react";
 import type { AppState, AppRequest, Settings } from "../shared/contracts/app";
 import type { Opportunity } from "../engine/market/opportunities";
+import { mergeOfferRows } from "./market-list";
 import { money, roi, signClass } from "./lib/format";
 export type Request = (r: AppRequest) => Promise<AppState | undefined>;
 export function MarketView({
@@ -34,14 +34,15 @@ export function MarketView({
     [chosen, setChosen] = useState<Opportunity | null>(null),
     [quantity, setQuantity] = useState("1"),
     [cart, setCart] = useState<{ id: string; quantity: number }[]>([]),
-    [filters, setFilters] = useState(false),
     [acceptId, setAcceptId] = useState(() => crypto.randomUUID()),
     [message, setMessage] = useState("");
   const parent = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (rows.length === 0 && state.opportunities.length)
-      setRows(state.opportunities);
-  }, [state.opportunities, rows.length]);
+    const completed = !state.market.calculation.busy;
+    setRows((current) =>
+      mergeOfferRows(current, state.opportunities, completed),
+    );
+  }, [state.opportunities, state.market.calculation]);
   const currentIds = useMemo(
     () => new Set(state.opportunities.map((o) => o.id)),
     [state.opportunities],
@@ -58,15 +59,11 @@ export function MarketView({
     estimateSize: () => 106,
     overscan: 8,
   });
-  const changed =
-    rows.map((o) => o.id + o.quantity + o.sell.profit).join("|") !==
-    state.opportunities.map((o) => o.id + o.quantity + o.sell.profit).join("|");
   async function settings(patch: Partial<Settings>) {
-    const s = await request({
+    await request({
       kind: "settings.save",
       value: { ...state.settings, ...patch },
     });
-    if (s) setRows(s.opportunities);
   }
   async function show(o: Opportunity) {
     setChosen(o);
@@ -99,30 +96,30 @@ export function MarketView({
     <>
       <div className="market-toolbar">
         <div className="actions">
-          <Button
-            variant="secondary"
-            onClick={() => void settings({ sort: "buy", roiEnabled: false })}
-          >
-            Быстрый оборот
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() =>
-              void settings({ sort: "best", roiEnabled: true, minROI: 30 })
-            }
-          >
-            Высокий ROI
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void settings({ sort: "best", roiEnabled: false })}
-          >
-            Крупная прибыль
-          </Button>
-          <Button variant="ghost" onClick={() => setFilters(!filters)}>
-            <SlidersHorizontal size={15} />
-            Все фильтры
-          </Button>
+          <label className="field">
+            Минимальный ROI, %
+            <Input
+              aria-label="Минимальный ROI"
+              type="number"
+              min="0"
+              max="10000"
+              defaultValue={state.settings.minROI}
+              onBlur={(e) =>
+                void settings({
+                  minROI: Number(e.target.value),
+                  roiEnabled: true,
+                })
+              }
+            />
+          </label>
+          <label className="field">
+            Минимальный профит, ISK
+            <Input
+              aria-label="Минимальный профит предложения"
+              defaultValue={state.settings.minProfit}
+              onBlur={(e) => void settings({ minProfit: e.target.value })}
+            />
+          </label>
         </div>
         <Button
           variant="outline"
@@ -134,102 +131,52 @@ export function MarketView({
         </Button>
       </div>
       <div className="caption mt-3 mb-5">
-        {rows.length} предложений · прибыль ≥ {money(state.settings.minProfit)}{" "}
-        ISK · ROI{" "}
-        {state.settings.roiEnabled
-          ? "≥ " + state.settings.minROI + "%"
-          : "выключен"}{" "}
-        · сортировка:{" "}
-        {state.settings.sort === "buy"
-          ? "buy"
-          : state.settings.sort === "sell"
-            ? "sell"
-            : "лучший результат"}{" "}
-        · лимит товара {state.settings.maxTypeShare * 100}%
+        {rows.length} предложений · профит от {money(state.settings.minProfit)} ISK · ROI от {state.settings.minROI}%
       </div>
-      {filters && (
-        <div className="panel filters">
-          <label className="field">
-            Прибыль позиции, ISK
-            <Input
-              aria-label="Фильтр прибыль"
-              defaultValue={state.settings.minProfit}
-              onBlur={(e) => void settings({ minProfit: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            ROI, %
-            <Input
-              aria-label="Фильтр ROI"
-              type="number"
-              defaultValue={state.settings.minROI}
-              onBlur={(e) =>
-                void settings({
-                  minROI: Number(e.target.value),
-                  roiEnabled: true,
-                })
-              }
-            />
-          </label>
-          <label className="field">
-            Прибыль рейса, ISK
-            <Input
-              defaultValue={state.settings.minTripProfit}
-              onBlur={(e) => void settings({ minTripProfit: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            Лимит одного типа, %
-            <Input
-              type="number"
-              min="1"
-              max="100"
-              defaultValue={state.settings.maxTypeShare * 100}
-              onBlur={(e) =>
-                void settings({ maxTypeShare: Number(e.target.value) / 100 })
-              }
-            />
-          </label>
-          <div className="actions">
-            <Button
-              variant="outline"
-              onClick={() => void settings({ sort: "buy" })}
-            >
-              По buy
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void settings({ sort: "sell" })}
-            >
-              По sell
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => void settings({ roiEnabled: false })}
-            >
-              Выключить ROI
-            </Button>
-          </div>
-        </div>
-      )}
       <section className="market-panel">
         <div className="table-intro">
           <span>
-            Прибыль за партию после налогов и комиссий · перевозка не включена
+            Прибыль после налогов и комиссий · перевозка не включена
           </span>
-          {changed && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setRows(state.opportunities)}
-            >
-              Есть обновления
-            </Button>
+          {state.market.calculation.busy && (
+            <div className="offer-progress" role="status" aria-live="polite">
+              {(() => {
+                const progress = state.market.calculation;
+                const elapsed = (Date.now() - progress.startedAt) / 1000;
+                const speed = progress.processed / Math.max(elapsed, 1);
+                const remaining =
+                  progress.processed >= 8 && speed > 0
+                    ? Math.ceil((progress.total - progress.processed) / speed)
+                    : null;
+                return (
+                  <div className="flex justify-between gap-4">
+                    <span>{progress.phase}</span>
+                    {progress.total > 0 && (
+                      <span>
+                        {Math.floor(
+                          (100 * progress.processed) / progress.total,
+                        )}% · {progress.processed}/{progress.total} товаров
+                        {remaining !== null && ` · осталось около ${remaining} сек.`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+              <progress
+                max={state.market.calculation.total || 1}
+                value={
+                  state.market.calculation.total
+                    ? state.market.calculation.processed
+                    : undefined
+                }
+                aria-label="Загрузка торговых предложений"
+              />
+            </div>
           )}
         </div>
         <div className="market-row table-header" role="row">
           <span>Товар / направление</span>
-          <span className="numeric">Партия / объём</span>
+          <span className="numeric">Купить / доступно</span>
           <span className="numeric">Закупка, ISK</span>
           <span className="numeric">Прибыль сразу, ISK</span>
           <span className="numeric">Прибыль sell, ISK</span>
@@ -286,8 +233,11 @@ export function MarketView({
                     </small>
                   </span>
                   <span className="numeric">
-                    {money(String(o.quantity))} шт.
-                    <small>{money(o.volume, 2)} м³</small>
+                    {money(String(o.quantity))} шт. к сделке
+                    <small>
+                      В sell-ордерах: {money(String(o.availableQuantity))} шт.
+                    </small>
+                    <small>{money(o.volume, 2)} м³ к сделке</small>
                   </span>
                   <span className="numeric">
                     {money(o.purchase.total)}
@@ -348,13 +298,12 @@ export function MarketView({
           {!rows.length && (
             <div className="empty">
               <h2>
-                {state.market.status.startsWith("Расчёт")
-                  ? "Рассчитываем торговые возможности…"
+                {state.market.calculation.busy
+                  ? "Обновляем предложения в фоне…"
                   : "Подходящих предложений пока нет"}
               </h2>
               <p>
-                Проверьте бюджет, свежесть рынка и профиль продавца. Фильтры
-                могут исключать все доступные партии.
+                Предложения автоматически обновляются по мере загрузки рынка.
               </p>
             </div>
           )}
@@ -476,10 +425,6 @@ export function MarketView({
             >
               Копировать для мультибая
             </Button>
-            <span className="caption">
-              Порог рейса: {money(state.settings.minTripProfit)} ISK.
-              Проверяется при принятии.
-            </span>
           </div>
         </section>
       )}

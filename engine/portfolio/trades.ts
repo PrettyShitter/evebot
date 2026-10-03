@@ -152,13 +152,6 @@ export class Trades {
             "Выбранное количество больше не проходит фильтры прибыли/ROI",
           );
       }
-      const routeProfit = sum(
-        items.map((o) =>
-          o.rankedBy === "buy" ? o.buy.result.profit : o.sell.profit,
-        ),
-      );
-      if (routeProfit.lt(settings.minTripProfit))
-        throw Error("Не достигнут минимальный профит рейса");
       if (parentId) {
         const parent = this.list().find((d) => d.id === parentId);
         if (

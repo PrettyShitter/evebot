@@ -22,9 +22,9 @@ export type Settings = z.infer<typeof settingsSchema>;
 export const DEFAULT_SETTINGS: Settings = {
   clientId: "",
   minProfit: "1000000",
-  minTripProfit: "5000000",
+  minTripProfit: "0",
   minROI: 0,
-  roiEnabled: false,
+  roiEnabled: true,
   maxTypeShare: 0.2,
   notificationThreshold: "10000000",
   sound: false,
@@ -187,6 +187,14 @@ export interface AppState {
     loadedRegions: number;
     historyPairs: number;
     status: string;
+    calculation: {
+      busy: boolean;
+      phase: string;
+      processed: number;
+      total: number;
+      startedAt: number;
+      revision: number;
+    };
   };
 }
 export interface Bridge {

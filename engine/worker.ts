@@ -72,6 +72,15 @@ let calculationAt = 0;
 let calculationError = "";
 let calculationWorker: Worker | undefined;
 let calculationTimer: NodeJS.Timeout | undefined;
+let scanFloor = "0";
+let calculationProgress = {
+  busy: false,
+  phase: "Ожидание данных",
+  processed: 0,
+  total: 0,
+  startedAt: 0,
+  revision: 0,
+};
 function liveCandidates() {
   if (!market.data) return [];
   const snapshots = latestSnapshots(store, market.data.regions);
@@ -87,28 +96,48 @@ function liveCandidates() {
     notificationThreshold: "0",
     sound: false,
   };
+  const filterKeys = new Set([
+    "minProfit",
+    "minROI",
+    "roiEnabled",
+    "sort",
+    "notificationThreshold",
+    "sound",
+  ]);
+  const baseSettings = Object.fromEntries(
+    Object.entries(structural).filter(([name]) => !filterKeys.has(name)),
+  );
   const key = JSON.stringify([
     snapshots.map((s) => s.id),
-    store.sql
-      .prepare("SELECT value FROM sync_cursors WHERE key='history-revision'")
-      .get(),
-    structural,
+    baseSettings,
     budget,
     [...trades.exposures()],
     store.sql.prepare("SELECT count(*) n FROM sale_allocations").get(),
     store.sql
       .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
       .get(),
+    market.data.version,
+    market.data.stations.map((station) => station.id),
   ]);
   const retryReady =
     calculationError === "" || Date.now() - calculationAt > 30000;
+  const lowerProfitFloor = Number(settings.minProfit) < Number(scanFloor);
+  const mustCalculate = key !== signature || lowerProfitFloor;
   if (
     !calculationBusy &&
     retryReady &&
-    (key !== signature || filterSignature !== JSON.stringify(settings))
+    (mustCalculate || filterSignature !== JSON.stringify(settings))
   ) {
     calculationBusy = true;
     calculationError = "";
+    calculationProgress = {
+      ...calculationProgress,
+      busy: true,
+      phase: mustCalculate ? "Подготовка стаканов трёх хабов" : "Применение фильтров",
+      processed: 0,
+      total: 0,
+      startedAt: Date.now(),
+    };
     if (!calculationWorker) {
       calculationWorker = new Worker(join(__dirname, "calculator.cjs"), {
         workerData: config,
@@ -120,9 +149,22 @@ function liveCandidates() {
             key: string;
             filtered: Opportunity[];
             filterSignature: string;
+            scanFloor: string;
           };
+          progress?: { phase: string; processed: number; total: number };
           error?: string;
         }) => {
+          if (message.progress) {
+            calculationProgress = {
+              ...calculationProgress,
+              ...message.progress,
+              startedAt:
+                calculationProgress.startedAt ||
+                (message.progress.total > 0 ? Date.now() : 0),
+            };
+            return;
+          }
+          if (!message.result && !message.error) return;
           clearTimeout(calculationTimer);
           calculationTimer = undefined;
           calculationBusy = false;
@@ -131,6 +173,14 @@ function liveCandidates() {
             cached = message.result.filtered;
             signature = message.result.key;
             filterSignature = message.result.filterSignature;
+            scanFloor = message.result.scanFloor ?? scanFloor;
+            calculationProgress = {
+              ...calculationProgress,
+              phase: "Обновлено",
+              processed: calculationProgress.total,
+              busy: false,
+              revision: calculationProgress.revision + 1,
+            };
             saveFeatures(store, cached);
             notifications = [
               ...notifications,
@@ -141,6 +191,11 @@ function liveCandidates() {
             ].slice(-20);
           } else {
             calculationError = "Не удалось рассчитать рынок. Повторяем расчёт.";
+            calculationProgress = {
+              ...calculationProgress,
+              busy: false,
+              phase: "Ошибка расчёта",
+            };
           }
         },
       );
@@ -150,6 +205,11 @@ function liveCandidates() {
         calculationBusy = false;
         calculationAt = Date.now();
         calculationError = "Расчёт рынка остановился. Повторяем расчёт.";
+        calculationProgress = {
+          ...calculationProgress,
+          busy: false,
+          phase: "Ошибка расчёта",
+        };
         calculationWorker = undefined;
       });
     }
@@ -159,19 +219,19 @@ function liveCandidates() {
       calculationBusy = false;
       calculationAt = Date.now();
       calculationError = "Расчёт рынка превысил лимит времени. Повторим через 30 секунд.";
+      calculationProgress = {
+        ...calculationProgress,
+        busy: false,
+        phase: "Превышено время расчёта",
+      };
       calculationWorker = undefined;
       void worker?.terminate();
     }, 120000).unref();
     calculationWorker.postMessage({
-      kind:
-        key === signature && filterSignature !== JSON.stringify(settings)
-          ? "filter"
-          : "calculate",
+      kind: mustCalculate ? "calculate" : "filter",
     });
   }
-  // Do not allow an old budget, profile or market generation to be traded.
-  if (key !== signature || filterSignature !== JSON.stringify(settings))
-    return [];
+  // Keep the last completed offers visible while the next snapshot is analyzed.
   return cached;
 }
 function candidates() {
@@ -190,20 +250,31 @@ function candidates() {
     notificationThreshold: "0",
     sound: false,
   };
+  const filterKeys = new Set([
+    "minProfit",
+    "minROI",
+    "roiEnabled",
+    "sort",
+    "notificationThreshold",
+    "sound",
+  ]);
+  const baseSettings = Object.fromEntries(
+    Object.entries(structural).filter(([name]) => !filterKeys.has(name)),
+  );
   const key = JSON.stringify([
     snapshots.map((s) => s.id),
-    store.sql
-      .prepare("SELECT value FROM sync_cursors WHERE key='history-revision'")
-      .get(),
-    structural,
+    baseSettings,
     budget,
     [...trades.exposures()],
     store.sql.prepare("SELECT count(*) n FROM sale_allocations").get(),
     store.sql
       .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
       .get(),
+    market.data.version,
+    market.data.stations.map((station) => station.id),
   ]);
-  if (key === signature) return filtered();
+  const lowerProfitFloor = Number(settings.minProfit) < Number(scanFloor);
+  if (key === signature && !lowerProfitFloor) return filtered();
   signature = key;
   const snapshot = latestOrders(
     store,
@@ -221,11 +292,16 @@ function candidates() {
     string,
     { observations: number; confirmedSales: number }
   >();
+  const hubStationIds = market.data.stations.map((station) => station.id);
   for (const row of store.sql
     .prepare(
-      "SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<=? AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id",
+      `SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<=? AND o.station_id IN (${hubStationIds.map(() => "?").join(",")}) AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id`,
     )
-    .all(since, at) as { station_id: string; type_id: string; n: number }[])
+    .all(since, at, ...hubStationIds) as {
+    station_id: string;
+    type_id: string;
+    n: number;
+  }[])
     local.set(row.type_id + ":" + row.station_id, {
       observations: row.n,
       confirmedSales: 0,
@@ -279,7 +355,14 @@ function candidates() {
     at,
     snapshotIds: snapshots.map((s) => s.id),
   });
+  scanFloor = settings.minProfit;
   filterSignature = "";
+  calculationProgress = {
+    ...calculationProgress,
+    phase: "Обновлено",
+    processed: calculationProgress.total,
+    revision: calculationProgress.revision + 1,
+  };
   return filtered();
 }
 let preview: Opportunity | null = null;
@@ -324,6 +407,7 @@ function state(): AppState {
         : "Подключите три персонажа",
     market: {
       ...market.summary(),
+      calculation: calculationProgress,
       status: calculationBusy
         ? "Расчёт торговых возможностей… Рынок и кошельки доступны."
         : calculationError || market.status,
@@ -409,6 +493,8 @@ parentPort!.on(
         request.kind === "deal.accept" &&
         !store.sql.prepare("SELECT id FROM deals WHERE id=?").get(request.id)
       ) {
+        if (calculationBusy)
+          throw Error("Рынок обновляется. Повторите принятие через несколько секунд.");
         const current = candidates();
         const items = request.items.map((item) => {
           const o = current.find((x) => x.id === item.id);

@@ -7,7 +7,10 @@ import {
   scanOpportunities,
   filterOpportunities,
 } from "../engine/market/opportunities";
-import type { StaticData } from "../engine/market/static-data";
+import {
+  withSearchZone,
+  type StaticData,
+} from "../engine/market/static-data";
 import { DEFAULT_SETTINGS } from "../shared/contracts/app";
 import type { Order } from "../shared/contracts/esi";
 mkdirSync(".cache", { recursive: true });
@@ -26,13 +29,17 @@ const saved = JSON.parse(readFileSync(path, "utf8")) as {
   orders: Order[];
   snapshots: { id: string; modifiedAt: string }[];
 };
-const data = JSON.parse(
-  readFileSync("resources/static-data.json", "utf8"),
-) as StaticData;
+const data = withSearchZone(
+  JSON.parse(readFileSync("resources/static-data.json", "utf8")) as StaticData,
+);
+const stationIds = new Set(data.stations.map((station) => station.id));
+const scopedOrders = saved.orders.filter((order) =>
+  stationIds.has(order.location_id),
+);
 const start = performance.now();
 const offers = scanOpportunities({
   data,
-  orders: saved.orders,
+  orders: scopedOrders,
   settings: { ...DEFAULT_SETTINGS, minProfit: "0", minTripProfit: "0" },
   available: "800000000",
   pool: "800000000",
@@ -69,9 +76,11 @@ const result = {
     file: path,
     region: "10000002",
     orders: saved.orders.length,
+    scopedOrders: scopedOrders.length,
     snapshot: saved.snapshots,
   },
-  zoneStations: data.stations.length,
+  hubSystems: data.zone.length,
+  hubStations: data.stations.length,
   types: data.types.length,
   offers: offers.length,
   scanMs,
