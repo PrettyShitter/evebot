@@ -23,7 +23,7 @@ test("stage 7: desktop selection, imported operations, review and explicit closi
     await page.getByRole("tab", { name: /Текущие сделки/ }).click();
     await page.getByRole("button", { name: "Маршрут и подробности" }).click();
     await page.getByRole("button", { name: "ПРОДАЛ", exact: true }).click();
-    await expect(page.getByText(/Покупка ещё не найдена/)).toBeVisible();
+    await expect(page.getByText(/Покупка ещё не привязана/)).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Повторить сверку" }),
     ).toBeVisible();

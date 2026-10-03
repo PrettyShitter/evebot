@@ -118,3 +118,76 @@ it("stage 7: explicit buy binding, alt delivery review, partial FIFO, button, ex
     s.close();
   }
 });
+
+it("manually reconciles wallet operations completed before the deal was selected", () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  try {
+    seedDemo(s);
+    s.saveSettings({ ...s.getSettings(), minTripProfit: "0" });
+    const data = readStatic(s)!;
+    const t = new Trades(s, () => data),
+      r = new Reconciler(s, () => data);
+    const opportunity = selectQuantity(
+      demoScan(s).find((o) => o.type.id === "587")!,
+      1,
+    );
+    s.sql.prepare("UPDATE characters SET status='syncing'").run();
+    const transaction = (
+      id: string,
+      date: string,
+      price: string,
+      buy: boolean,
+    ) => ({
+      transaction_id: id,
+      date,
+      type_id: "587",
+      location_id: buy ? opportunity.source.id : opportunity.destination.id,
+      quantity: 1,
+      unit_price: price,
+      is_buy: buy,
+      is_personal: true,
+      client_id: "999",
+      journal_ref_id: id + "0",
+    });
+    const insert = (v: ReturnType<typeof transaction>) =>
+      s.sql
+        .prepare("INSERT INTO wallet_transactions VALUES (?,?,?,?,?)")
+        .run("esi", "90000001", v.transaction_id, JSON.stringify(v), v.date);
+    const buyAt = new Date(Date.now() - 120_000).toISOString();
+    const sellAt = new Date(Date.now() - 60_000).toISOString();
+    insert(transaction("1001", buyAt, "100", true));
+    insert(transaction("1002", sellAt, "150", false));
+    const journal = {
+      id: "2001",
+      date: sellAt,
+      ref_type: "transaction_tax",
+      amount: "-15",
+    };
+    s.sql
+      .prepare("INSERT INTO wallet_journal VALUES (?,?,?,?)")
+      .run("90000001", journal.id, JSON.stringify(journal), sellAt);
+
+    t.accept("historical-deal", [opportunity]);
+    r.run();
+    expect(t.list()[0].result.purchased).toBe(0);
+
+    expect(() =>
+      r.bindPurchase("90000001", "1001", "historical-deal"),
+    ).not.toThrow();
+    r.run("historical-deal");
+    expect(t.list()[0].result.purchased).toBe(1);
+    expect(t.list()[0].result.sold).toBe(1);
+    expect(t.list()[0].saleTransactions).toEqual([
+      { transactionId: "1002", date: sellAt, quantity: 1 },
+    ]);
+    expect(t.list()[0].status).toBe("NEEDS_REVIEW");
+    expect(r.expenses()).toHaveLength(1);
+    r.attachExpense("historical-deal", "90000001", journal.id);
+    r.confirmExpenses("historical-deal");
+    r.run();
+    expect(t.list()[0].status).toBe("CLOSED");
+    expect(t.list()[0].result.profit).toBe("35.00");
+  } finally {
+    s.close();
+  }
+});

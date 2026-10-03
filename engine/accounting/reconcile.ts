@@ -102,7 +102,7 @@ export class Reconciler {
     const deal = this.trades.list().find((d) => d.id === dealId);
     if (!raw?.tx.is_buy || !raw.tx.is_personal || !deal)
       throw Error("Не найдена личная покупка");
-    if (raw.tx.date < deal.createdAt)
+    if (source === "auto" && raw.tx.date < deal.createdAt)
       throw Error("Покупка совершена до выбора этой сделки");
     const line = deal.forecast.find(
       (o) => o.type.id === raw.tx.type_id && o.source.id === raw.tx.location_id,

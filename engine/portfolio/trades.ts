@@ -23,6 +23,7 @@ export interface DealView {
   highsec: string[] | null;
   lowsec: string[] | null;
   events: { at: string; kind: string; payload: string }[];
+  saleTransactions: { transactionId: string; date: string; quantity: number }[];
   result: {
     profit: string | null;
     roi: string | null;
@@ -288,6 +289,21 @@ export class Trades {
         proceeds: string;
         tax: string | null;
       }[];
+      const saleTransactions = (
+        this.store.sql
+          .prepare(
+            "SELECT a.transaction_id,a.quantity,w.payload FROM sale_allocations a JOIN purchase_lots l ON l.id=a.lot_id JOIN wallet_transactions w ON w.character_id=a.seller_id AND w.id=a.transaction_id WHERE l.deal_id=? ORDER BY a.transaction_id",
+          )
+          .all(d.id) as {
+          transaction_id: string;
+          quantity: number;
+          payload: string;
+        }[]
+      ).map((sale) => ({
+        transactionId: sale.transaction_id,
+        date: JSON.parse(sale.payload).date as string,
+        quantity: sale.quantity,
+      }));
       const fees = this.store.sql
         .prepare("SELECT amount FROM fee_allocations WHERE deal_id=?")
         .all(d.id) as { amount: string }[];
@@ -326,6 +342,7 @@ export class Trades {
             "SELECT at,kind,payload FROM deal_events WHERE deal_id=? ORDER BY at",
           )
           .all(d.id) as { at: string; kind: string; payload: string }[],
+        saleTransactions,
         result: {
           roi:
             exact && cost.plus(fee).gt(0)

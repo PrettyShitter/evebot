@@ -17,22 +17,29 @@ export function ReviewPanel({
   busy: boolean;
 }) {
   const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const purchases = state.review.purchases.filter(
-    (p) =>
-      p.tx.date >= deal.createdAt &&
-      deal.forecast.some(
-        (o) => o.type.id === p.tx.type_id && o.source.id === p.tx.location_id,
-      ),
+  const purchases = state.review.purchases.filter((p) =>
+    deal.forecast.some(
+      (o) => o.type.id === p.tx.type_id && o.source.id === p.tx.location_id,
+    ),
   );
   const transfers = state.review.transfers.filter((t) => t.deal_id === deal.id);
   const expenses = state.review.expenses.filter(
-    (e) => e.characterId === deal.sellerId && e.journal.date >= deal.createdAt,
+    (e) =>
+      e.characterId === deal.sellerId &&
+      (e.journal.date >= deal.createdAt ||
+        (e.journal.ref_type === "transaction_tax" &&
+          deal.saleTransactions.some(
+            (sale) =>
+              Math.abs(Date.parse(e.journal.date) - Date.parse(sale.date)) <=
+              120_000,
+          ))),
   );
   return (
     <div className="space-y-3">
       <h3 className="font-medium">Сверка исходных операций</h3>
       <p className="caption">
-        Привязывайте только покупки этой сделки. Подтверждение передачи
+        Привязывайте только покупки этой сделки, в том числе совершённые до её
+        выбора. Старые операции сопоставляются вручную. Подтверждение передачи
         означает, что партия действительно доступна основному продавцу. Расход
         можно распределить частично между сделками.
       </p>
@@ -53,7 +60,9 @@ export function ReviewPanel({
           <span className="text-sm">
             Покупка #{p.tx.transaction_id} · {p.tx.quantity} шт. ×{" "}
             {money(p.tx.unit_price, 2)} ISK ·{" "}
-            {state.characters.find((c) => c.id === p.characterId)?.name}
+            {state.characters.find((c) => c.id === p.characterId)?.name} ·{" "}
+            {new Date(p.tx.date).toLocaleString("ru-RU")}
+            {p.tx.date < deal.createdAt && " · до выбора сделки"}
           </span>
           <Button
             size="sm"
@@ -91,7 +100,14 @@ export function ReviewPanel({
         <div className="extra-row" key={e.journal.id}>
           <span className="text-sm">
             {e.journal.ref_type} #{e.journal.id} ·{" "}
-            {money(e.journal.amount ?? "0", 2)} ISK
+            {money(e.journal.amount ?? "0", 2)} ISK ·{" "}
+            {new Date(e.journal.date).toLocaleString("ru-RU")}
+            {deal.saleTransactions.some(
+              (sale) =>
+                e.journal.ref_type === "transaction_tax" &&
+                Math.abs(Date.parse(e.journal.date) - Date.parse(sale.date)) <=
+                  120_000,
+            ) && " · время продажи"}
           </span>
           <Input
             aria-label={"Часть расхода " + e.journal.id}
