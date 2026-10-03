@@ -36,6 +36,12 @@ export function MarketView({
     [cart, setCart] = useState<{ id: string; quantity: number }[]>([]),
     [acceptId, setAcceptId] = useState(() => crypto.randomUUID()),
     [message, setMessage] = useState("");
+  const settingsRef = useRef(state.settings);
+  const settingsQueue = useRef(Promise.resolve());
+  const pendingSettings = useRef(0);
+  useEffect(() => {
+    if (pendingSettings.current === 0) settingsRef.current = state.settings;
+  }, [state.settings]);
   const parent = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const completed = !state.market.calculation.busy;
@@ -60,10 +66,20 @@ export function MarketView({
     overscan: 8,
   });
   async function settings(patch: Partial<Settings>) {
-    await request({
-      kind: "settings.save",
-      value: { ...state.settings, ...patch },
-    });
+    settingsRef.current = { ...settingsRef.current, ...patch };
+    pendingSettings.current++;
+    const save = settingsQueue.current.then(() =>
+      request({ kind: "settings.save", value: settingsRef.current }),
+    );
+    settingsQueue.current = save.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      await save;
+    } finally {
+      pendingSettings.current--;
+    }
   }
   async function show(o: Opportunity) {
     setChosen(o);

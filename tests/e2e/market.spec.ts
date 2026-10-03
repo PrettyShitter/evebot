@@ -23,6 +23,15 @@ test("stage 5: filters, quantity quote, basket and idempotent acceptance", async
     const rows = page.locator(".data-row");
     await expect(rows.first()).toBeVisible();
     const min = page.getByLabel("Минимальный профит предложения");
+    const roi = page.getByLabel("Минимальный ROI");
+    await min.fill("0");
+    await min.press("Tab");
+    await roi.fill("30");
+    await roi.press("Tab");
+    await expect(page.getByText(/профит от 0 ISK · ROI от 30%/)).toBeVisible();
+    await roi.fill("0");
+    await roi.press("Tab");
+    await expect(page.getByText(/профит от 0 ISK · ROI от 0%/)).toBeVisible();
     await min.fill("999999999999");
     await min.blur();
     await expect(
