@@ -19,6 +19,7 @@ it("stage 7: explicit buy binding, alt delivery review, partial FIFO, button, ex
       demoScan(s).find((o) => o.type.id === "587")!,
       20,
     );
+    s.sql.prepare("UPDATE characters SET status='syncing'").run();
     t.accept("deal", [opportunity]);
     const now = new Date(Date.now() + 1000).toISOString();
     const tx = (id: string, q: number, price: string, buy: boolean) => ({

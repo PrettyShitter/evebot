@@ -110,9 +110,13 @@ export class Trades {
       if (!seller) throw Error("Не выбран основной продавец");
       if (
         portfolio.characters().length !== 3 ||
-        portfolio.characters().some((c) => c.status !== "connected")
+        portfolio
+          .characters()
+          .some((c) => !["connected", "syncing"].includes(c.status))
       )
-        throw Error("Сначала согласуйте все три кошелька");
+        throw Error(
+          "Подключите все три персонажа и повторите синхронизацию кошельков",
+        );
       const totals = basketTotals(items);
       const fees = sum(
         items.filter((o) => o.rankedBy === "sell").map((o) => o.sell.listing),
