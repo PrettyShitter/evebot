@@ -22,6 +22,11 @@ test("stage 7: desktop selection, imported operations, review and explicit closi
       .click();
     await page.getByRole("tab", { name: /Текущие сделки/ }).click();
     await page.getByRole("button", { name: "Маршрут и подробности" }).click();
+    await page.getByRole("button", { name: "ПРОДАЛ", exact: true }).click();
+    await expect(page.getByText(/Покупка ещё не найдена/)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Повторить сверку" }),
+    ).toBeVisible();
     await page
       .getByRole("button", { name: "DEMO: загрузить покупки и продажи" })
       .click();
@@ -32,10 +37,6 @@ test("stage 7: desktop selection, imported operations, review and explicit closi
     await page
       .getByRole("button", { name: "Все расходы сделки сопоставлены" })
       .click();
-    await expect(
-      page.getByRole("button", { name: "ПРОДАЛ", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "ПРОДАЛ", exact: true }).click();
     await expect(page.getByText("Текущих сделок пока нет")).toBeVisible();
     await page.getByRole("tab", { name: /Закрытые сделки/ }).click();
     await expect(

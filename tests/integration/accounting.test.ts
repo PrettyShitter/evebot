@@ -53,7 +53,7 @@ it("stage 7: explicit buy binding, alt delivery review, partial FIFO, button, ex
     expect(t.list()[0].result.sold).toBe(0);
     r.confirmTransfer(r.review().transfers[0].id);
     r.run("deal");
-    expect(t.list()[0].status).toBe("SALE_PARTIAL");
+    expect(t.list()[0].status).toBe("RECONCILING");
     expect(t.list()[0].result.cost).toBe("1240.00");
     expect(t.list()[0].result.remaining).toBe(8);
     const journal = (id: string, amount: string) => ({

@@ -1,7 +1,13 @@
 import { ReviewPanel } from "./ReviewPanel";
 import { useState } from "react";
 import { Button } from "./components/ui/button";
-import { MapPin, ArrowRight, ChevronDown, CheckCircle2 } from "lucide-react";
+import {
+  MapPin,
+  ArrowRight,
+  ChevronDown,
+  CheckCircle2,
+  LoaderCircle,
+} from "lucide-react";
 import type { AppState } from "../shared/contracts/app";
 import type { Request } from "./MarketView";
 import { money, signClass, roi } from "./lib/format";
@@ -30,6 +36,7 @@ export function DealsView({
   const [since, setSince] = useState("");
   const [showCancelled, setShowCancelled] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [syncingDeal, setSyncingDeal] = useState<string | null>(null);
   const deals = state.deals.filter((d) =>
     closed
       ? d.status === "CLOSED" && (!since || d.createdAt.slice(0, 10) >= since)
@@ -182,11 +189,21 @@ export function DealsView({
               {!closed && d.status !== "CANCELLED" && (
                 <Button
                   disabled={busy}
-                  onClick={() =>
-                    void request({ kind: "deal.reconcile", id: d.id })
-                  }
+                  onClick={() => {
+                    setSyncingDeal(d.id);
+                    void request({ kind: "deal.reconcile", id: d.id }).finally(
+                      () => setSyncingDeal(null),
+                    );
+                  }}
                 >
-                  ПРОДАЛ
+                  {syncingDeal === d.id && busy && (
+                    <LoaderCircle className="animate-spin" size={15} />
+                  )}
+                  {syncingDeal === d.id && busy
+                    ? "Сверяем кошельки…"
+                    : d.status === "RECONCILING"
+                      ? "Повторить сверку"
+                      : "ПРОДАЛ"}
                 </Button>
               )}
               {d.status === "SELECTED" && (
@@ -201,6 +218,13 @@ export function DealsView({
                 </Button>
               )}
             </div>
+            {d.status === "RECONCILING" && (
+              <p className="caption mt-3" role="status" aria-live="polite">
+                {d.result.purchased === 0
+                  ? "Покупка ещё не найдена в истории кошелька ESI. Сделка не закроется, пока приложение не импортирует покупку и продажу. Сверка кошельков повторяется автоматически."
+                  : `Покупка импортирована: ${d.result.purchased} шт.; осталось продать ${d.result.remaining} шт. После продажи повторите сверку.`}
+              </p>
+            )}
             {expanded === d.id && (
               <div className="border-t border-border mt-5 pt-5 space-y-4">
                 <p className="text-sm">

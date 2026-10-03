@@ -543,7 +543,8 @@ export class Reconciler {
         const confirmed = this.store.sql
           .prepare("SELECT value FROM sync_cursors WHERE key=?")
           .get("expenses-confirmed:" + d.id) as { value: string } | undefined;
-        if (requested && purchased === 0) status = "RECONCILING";
+        if (requested && (purchased < expected || remaining > 0))
+          status = "RECONCILING";
         const exact = confirmed?.value === this.evidenceKey(d.id);
         this.store.sql
           .prepare(
