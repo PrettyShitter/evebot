@@ -25,7 +25,9 @@ test("stage 7: desktop selection, imported operations, review and explicit closi
     await page
       .getByRole("button", { name: "DEMO: загрузить покупки и продажи" })
       .click();
-    await page.getByRole("button", { name: "Это покупка сделки" }).click();
+    await expect(
+      page.getByRole("button", { name: "Это покупка сделки" }),
+    ).toHaveCount(0);
     await expect(page.getByText("Готово к закрытию")).toBeVisible();
     await page
       .getByRole("button", { name: "Все расходы сделки сопоставлены" })

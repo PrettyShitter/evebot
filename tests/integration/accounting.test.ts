@@ -40,10 +40,13 @@ it("stage 7: explicit buy binding, alt delivery review, partial FIFO, button, ex
     insert("90000002", tx("1", 10, "100", true));
     insert("90000001", tx("2", 10, "120", true));
     r.run();
-    expect(t.list()[0].result.purchased).toBe(0);
-    expect(t.list()[0].status).toBe("NEEDS_REVIEW");
-    r.bindPurchase("90000002", "1", "deal");
-    r.bindPurchase("90000001", "2", "deal");
+    expect(t.list()[0].result.purchased).toBe(20);
+    expect(
+      t
+        .list()[0]
+        .events.filter((event) => event.kind === "purchase.auto-bound"),
+    ).toHaveLength(2);
+    expect(r.review().transfers).toHaveLength(1);
     insert("90000001", tx("3", 12, "150", false));
     r.run("deal");
     expect(t.list()[0].result.sold).toBe(0);

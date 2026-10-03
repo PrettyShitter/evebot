@@ -89,7 +89,12 @@ export class Reconciler {
       .run(lotId);
     this.trades.event(lot.deal_id, "transfer.user-confirmed", { lotId });
   }
-  bindPurchase(characterId: string, transactionId: string, dealId: string) {
+  bindPurchase(
+    characterId: string,
+    transactionId: string,
+    dealId: string,
+    source: "user" | "auto" = "user",
+  ) {
     const raw = this.transactions().find(
       (r) =>
         r.characterId === characterId && r.tx.transaction_id === transactionId,
@@ -97,16 +102,22 @@ export class Reconciler {
     const deal = this.trades.list().find((d) => d.id === dealId);
     if (!raw?.tx.is_buy || !raw.tx.is_personal || !deal)
       throw Error("Не найдена личная покупка");
+    if (raw.tx.date < deal.createdAt)
+      throw Error("Покупка совершена до выбора этой сделки");
     const line = deal.forecast.find(
       (o) => o.type.id === raw.tx.type_id && o.source.id === raw.tx.location_id,
     );
     if (!line) throw Error("Тип или станция покупки не совпадают");
     this.store.sql.transaction(() => {
       this.addLot(raw, dealId, deal.sellerId, line);
-      this.trades.event(dealId, "purchase.user-bound", {
-        characterId,
-        transactionId,
-      });
+      this.trades.event(
+        dealId,
+        source === "auto" ? "purchase.auto-bound" : "purchase.user-bound",
+        {
+          characterId,
+          transactionId,
+        },
+      );
     })();
   }
   private addLot(
@@ -349,24 +360,37 @@ export class Reconciler {
             .get(r.characterId, r.tx.transaction_id)
         )
           continue;
-        const matches = this.trades
-          .list()
-          .filter(
-            (d) =>
-              !["CANCELLED", "CLOSED"].includes(d.status) &&
-              r.tx.date >= d.createdAt &&
-              d.forecast.some(
-                (l) =>
-                  l.type.id === r.tx.type_id &&
-                  l.source.id === r.tx.location_id,
-              ),
+        const matches = this.trades.list().filter((d) => {
+          if (["CANCELLED", "CLOSED"].includes(d.status)) return false;
+          const line = d.forecast.find(
+            (l) =>
+              l.type.id === r.tx.type_id && l.source.id === r.tx.location_id,
           );
-        // Wallet alone cannot distinguish a personal purchase from a selected one: propose a match, require user binding.
+          if (!line || r.tx.date < d.createdAt) return false;
+          const acquired = (
+            this.store.sql
+              .prepare(
+                "SELECT coalesce(sum(quantity),0) n FROM purchase_lots WHERE deal_id=? AND type_id=?",
+              )
+              .get(d.id, r.tx.type_id) as { n: number }
+          ).n;
+          return acquired + r.tx.quantity <= line.quantity;
+        });
+        if (matches.length === 1) {
+          this.bindPurchase(
+            r.characterId,
+            r.tx.transaction_id,
+            matches[0].id,
+            "auto",
+          );
+          continue;
+        }
+        // A transaction matching more than one deal needs explicit review.
         for (const d of matches) {
           reviews.add(d.id);
           this.issue(
             d.id,
-            `Подтвердите привязку покупки ${r.tx.transaction_id} персонажа ${r.characterId}; личные покупки не распределяются автоматически`,
+            `Покупка ${r.tx.transaction_id} подходит нескольким сделкам; выберите её вручную`,
           );
         }
       }

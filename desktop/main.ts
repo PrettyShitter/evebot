@@ -429,8 +429,14 @@ app.whenReady().then(async () => {
       }).catch(() => {}),
   );
   await window.loadURL(entry);
-  await requestEngine({ kind: "state" });
+  const initialState = await requestEngine({ kind: "state" });
   macUpdates?.acknowledgeHealthy(process.argv);
+  if (
+    !demo &&
+    initialState.characters.length === 3 &&
+    initialState.characters.every((c) => c.status !== "revoked")
+  )
+    void syncWallets({ kind: "wallet.sync" }).catch(() => {});
 });
 app.on("window-all-closed", () => {
   if (quitting) app.quit();
