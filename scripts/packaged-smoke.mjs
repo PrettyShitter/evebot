@@ -75,6 +75,9 @@ try {
     BrowserWindow.getAllWindows()[0].show(),
   );
   checks.push("hide to tray + show");
+  // The app intentionally hides BrowserWindow on close, so ElectronApplication.close()
+  // alone waits forever for a process that remains alive in the tray.
+  await app.evaluate(({ app }) => app.quit());
   await app.close();
   app = await launch();
   console.log("Restarted packaged app; checking saved settings");
@@ -111,6 +114,9 @@ try {
   );
   console.log(JSON.stringify({ status: "PASS", checks }));
 } finally {
-  await app?.close();
+  if (app) {
+    await app.evaluate(({ app }) => app.quit()).catch(() => {});
+    await app.close().catch(() => {});
+  }
   rmSync(directory, { recursive: true, force: true });
 }
