@@ -19,6 +19,7 @@ import {
   RELEASE_REPOSITORY,
   type UpdateManifest,
 } from "../engine/updates/manifest";
+export const UPDATE_DOWNLOAD_TIMEOUT_MS = 30 * 60_000;
 const exec = promisify(execFile);
 export class SignedMacUpdater extends EventEmitter {
   autoDownload = false;
@@ -93,7 +94,7 @@ export class SignedMacUpdater extends EventEmitter {
     const file = await open(path, "wx", 0o600);
     try {
       const response = await this.fetcher(manifest.url, {
-        signal: AbortSignal.timeout(600000),
+        signal: AbortSignal.timeout(UPDATE_DOWNLOAD_TIMEOUT_MS),
         headers: { "User-Agent": "EVE-Trader-Updater" },
       });
       if (!response.ok || !response.body) throw Error("Download failed");

@@ -6,7 +6,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { UpdateController } from "../../desktop/update-controller";
 import { verifyManifest, isNewer } from "../../engine/updates/manifest";
-import { SignedMacUpdater } from "../../desktop/signed-mac-updater";
+import {
+  SignedMacUpdater,
+  UPDATE_DOWNLOAD_TIMEOUT_MS,
+} from "../../desktop/signed-mac-updater";
 class FakeUpdater extends EventEmitter {
   autoDownload = true;
   autoInstallOnAppQuit = true;
@@ -84,6 +87,9 @@ it("disabled updater never contacts server", async () => {
   await c.download();
   await c.install();
   expect(b.checks + b.downloads + b.installs).toBe(0);
+});
+it("allows slow release downloads to complete on constrained connections", () => {
+  expect(UPDATE_DOWNLOAD_TIMEOUT_MS).toBe(30 * 60_000);
 });
 const keys = generateKeyPairSync("ed25519");
 const key = keys.publicKey.export({ type: "spki", format: "pem" }).toString();

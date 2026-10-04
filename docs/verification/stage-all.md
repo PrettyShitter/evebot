@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-04T08:44:38.050Z
+UTC: 2026-10-04T09:05:04.030Z
 
-Commit: 486222b4a2b0b7e384abfb9b6fa7adf011391dc9; проверяется рабочее дерево.
+Commit: 9c824decb6f05923199d1876a344226fbb4a522f; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -32,9 +32,9 @@ Exit code: 0; PASS
 
 
  Test Files  9 passed (9)
-      Tests  38 passed (38)
-   Start at  15:44:55
-   Duration  1.34s (transform 45%, import 42%, tests 10%, worker 3%)
+      Tests  39 passed (39)
+   Start at  16:05:24
+   Duration  1.55s (transform 48%, import 41%, tests 8%, worker 3%)
 
 $ vitest run tests/unit
 
@@ -51,8 +51,8 @@ Exit code: 0; PASS
 
  Test Files  12 passed (12)
       Tests  34 passed (34)
-   Start at  15:44:58
-   Duration  11.64s (import 62%, tests 24%, transform 14%)
+   Start at  16:05:27
+   Duration  8.48s (import 60%, tests 28%, transform 11%, worker 1%)
 
 $ vitest run tests/integration
 
@@ -72,7 +72,7 @@ dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
 dist/renderer/assets/index-CPJ5PQp-.css   24.11 kB │ gzip:   5.55 kB
 dist/renderer/assets/index-2tvkOKze.js   441.39 kB │ gzip: 139.65 kB
 
-✓ built in 927ms
+✓ built in 615ms
 $ node scripts/build.mjs
 
 ```
@@ -85,15 +85,15 @@ Exit code: 0; PASS
 
 Running 4 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (7.1s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (5.6s)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (8.6s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (4.4s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
   ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (6.9s)
 
   1 skipped
-  3 passed (23.5s)
+  3 passed (23.7s)
 $ playwright test
-(node:57947) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:66012) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```
