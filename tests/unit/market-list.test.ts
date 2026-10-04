@@ -41,4 +41,11 @@ describe("market list background updates", () => {
     const rows = [offer("one", "1")];
     expect(mergeOfferRows(rows, [offer("one", "2")], false)).toBe(rows);
   });
+
+  it("removes cached rows immediately when the user changes filters", () => {
+    const current = [offer("one", "1"), offer("two", "2")];
+    expect(
+      mergeOfferRows(current, [offer("two", "3")], false, true),
+    ).toEqual([offer("two", "3")]);
+  });
 });

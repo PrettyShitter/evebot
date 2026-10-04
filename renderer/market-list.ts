@@ -16,7 +16,9 @@ export function mergeOfferRows<T extends OfferRow>(
   current: T[],
   incoming: T[],
   completed: boolean,
+  criteriaChanged = false,
 ): T[] {
+  if (criteriaChanged) return incoming;
   const latest = new Map(incoming.map((offer) => [offer.id, offer]));
   const seen = new Set<string>();
   const next = current.flatMap((old) => {

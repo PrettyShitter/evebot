@@ -34,16 +34,25 @@ export function MarketView({
   const settingsRef = useRef(state.settings);
   const settingsQueue = useRef(Promise.resolve());
   const pendingSettings = useRef(0);
+  const filterSignature = JSON.stringify([
+    state.settings.minProfit,
+    state.settings.minROI,
+    state.settings.roiEnabled,
+    state.settings.sort,
+  ]);
+  const previousFilterSignature = useRef(filterSignature);
   useEffect(() => {
     if (pendingSettings.current === 0) settingsRef.current = state.settings;
   }, [state.settings]);
   const parent = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const completed = !state.market.calculation.busy;
+    const criteriaChanged = previousFilterSignature.current !== filterSignature;
+    previousFilterSignature.current = filterSignature;
     setRows((current) =>
-      mergeOfferRows(current, state.opportunities, completed),
+      mergeOfferRows(current, state.opportunities, completed, criteriaChanged),
     );
-  }, [state.opportunities, state.market.calculation]);
+  }, [state.opportunities, state.market.calculation, filterSignature]);
   const currentIds = useMemo(
     () => new Set(state.opportunities.map((o) => o.id)),
     [state.opportunities],
