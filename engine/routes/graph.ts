@@ -7,7 +7,7 @@ export interface System {
 }
 export const SEARCH_RADIUS = 3;
 export type RouteMode = "highsec" | "lowsec";
-export const CENTERS = ["30000142", "30002187", "30002659"];
+export const CENTERS = ["30000142", "30002187", "30002659", "30002510"];
 // CCP system-security guide: positive values below .05 display as .1; >=.45 highsec.
 export function securityClass(raw: number): "highsec" | "lowsec" | "nullsec" {
   return raw >= 0.45 ? "highsec" : raw > 0 ? "lowsec" : "nullsec";

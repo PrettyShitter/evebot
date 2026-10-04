@@ -143,7 +143,7 @@ function liveCandidates() {
       ...calculationProgress,
       busy: true,
       phase: mustCalculate
-        ? "Подготовка стаканов трёх хабов"
+        ? "Подготовка стаканов выбранных хабов"
         : "Применение фильтров",
       processed: 0,
       total: 0,

@@ -32,7 +32,7 @@ export interface StaticData {
 // Recompute the configured search universe for persisted data from older releases.
 // Retain the full graph and NPC-origin index for routes and ranged buy orders.
 export function withSearchZone(data: StaticData): StaticData {
-  // Market scanning is limited to the three hub solar systems. Keep the full
+  // Market scanning is limited to the configured hub solar systems. Keep the full
   // graph so route calculation and buy-order range checks still work globally.
   const zone = new Set(CENTERS);
   const stations = data.stations.filter((s) => zone.has(s.systemId));
