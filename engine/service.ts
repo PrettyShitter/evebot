@@ -13,6 +13,7 @@ import {
 import { syncRegion, latestSnapshots } from "./market/snapshots";
 import { syncHistory } from "./history/history";
 import { excludedMarketTypeIds } from "./market/classification";
+import { CENTERS } from "./routes/graph";
 export class MarketService {
   readonly client = new EsiClient();
   readonly scheduler = new Scheduler();
@@ -24,18 +25,35 @@ export class MarketService {
     resources: string,
     readonly demo: boolean,
   ) {
-    this.data = readStatic(store);
-    if (!this.data && !demo) {
-      this.data = JSON.parse(
+    const persisted = readStatic(store);
+    this.data = persisted;
+    if (!demo) {
+      const bundled = JSON.parse(
         readFileSync(join(resources, "static-data.json"), "utf8"),
       ) as StaticData;
-      importStatic(store, this.data);
+      const hasNewerBundle =
+        Number.isFinite(Number(bundled.version)) &&
+        Number.isFinite(Number(persisted?.version)) &&
+        Number(bundled.version) > Number(persisted?.version);
+      if (!persisted || hasNewerBundle) this.data = bundled;
+      else if (
+        CENTERS.every((center) =>
+          persisted.systems.some((s) => s.id === center),
+        )
+      ) {
+        // A release can change the selected hubs without changing the SDE build.
+        // Backfill their bundled NPC stations into an older persisted catalogue.
+        const stations = new Map(persisted.stations.map((s) => [s.id, s]));
+        for (const station of bundled.stations)
+          if (!stations.has(station.id)) stations.set(station.id, station);
+        this.data = { ...persisted, stations: [...stations.values()] };
+      } else this.data = persisted;
     }
     if (this.data && !demo) {
       const narrowed = withSearchZone(this.data);
       if (
         JSON.stringify(narrowed.zone) !== JSON.stringify(this.data.zone) ||
-        narrowed.stations.length !== this.data.stations.length
+        JSON.stringify(narrowed.stations) !== JSON.stringify(this.data.stations)
       ) {
         importStatic(store, narrowed);
       }

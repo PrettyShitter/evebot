@@ -61,7 +61,7 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
     ...data,
     zone: [...oldZone],
     stations: [
-      ...data.stations,
+      ...data.stations.filter((s) => s.systemId !== "30002510"),
       { ...data.stations[0], id: "999999999", systemId: outside },
     ],
   };
