@@ -139,7 +139,7 @@ export class UpdateController {
     this.operation = true;
     this.patch({
       phase: "installing",
-      message: "Сохраняем резервную копию перед перезапуском…",
+      message: "Ждём завершения операций и сохраняем резервную копию…",
     });
     try {
       await this.prepare();

@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-04T08:33:48.143Z
+UTC: 2026-10-04T08:44:38.050Z
 
-Commit: 14867bcf251bbbfe635e0355aa4b0229c9b88cef; проверяется рабочее дерево.
+Commit: 486222b4a2b0b7e384abfb9b6fa7adf011391dc9; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -31,10 +31,10 @@ Exit code: 0; PASS
  RUN  v5.0.3 /Users/wozglas/Documents/ChatGPT/eve online bot
 
 
- Test Files  8 passed (8)
-      Tests  36 passed (36)
-   Start at  15:33:55
-   Duration  440ms (transform 45%, import 39%, tests 14%, worker 2%)
+ Test Files  9 passed (9)
+      Tests  38 passed (38)
+   Start at  15:44:55
+   Duration  1.34s (transform 45%, import 42%, tests 10%, worker 3%)
 
 $ vitest run tests/unit
 
@@ -51,8 +51,8 @@ Exit code: 0; PASS
 
  Test Files  12 passed (12)
       Tests  34 passed (34)
-   Start at  15:33:56
-   Duration  3.76s (import 62%, tests 30%, transform 8%)
+   Start at  15:44:58
+   Duration  11.64s (import 62%, tests 24%, transform 14%)
 
 $ vitest run tests/integration
 
@@ -72,7 +72,7 @@ dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
 dist/renderer/assets/index-CPJ5PQp-.css   24.11 kB │ gzip:   5.55 kB
 dist/renderer/assets/index-2tvkOKze.js   441.39 kB │ gzip: 139.65 kB
 
-✓ built in 313ms
+✓ built in 927ms
 $ node scripts/build.mjs
 
 ```
@@ -85,15 +85,15 @@ Exit code: 0; PASS
 
 Running 4 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (6.6s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (4.1s)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (7.1s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (5.6s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (6.0s)
+  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (6.9s)
 
   1 skipped
-  3 passed (19.3s)
+  3 passed (23.5s)
 $ playwright test
-(node:50066) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:57947) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```

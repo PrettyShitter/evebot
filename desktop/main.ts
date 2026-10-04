@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { UpdateController } from "./update-controller";
 import { Worker } from "node:worker_threads";
 import { SignedMacUpdater } from "./signed-mac-updater";
+import { waitForUpdateIdle } from "./update-readiness";
 import { join, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requestSchema, type AppState } from "../shared/contracts/app";
@@ -127,9 +128,11 @@ app.whenReady().then(async () => {
     app.getVersion(),
     updateReason,
     async () => {
-      if (syncing || pending.size) throw Error("Есть незавершённые операции");
       installingUpdate = true;
       try {
+        await waitForUpdateIdle(() => syncing || pending.size > 0, {
+          timeoutMs: UPDATE_BACKUP_TIMEOUT_MS,
+        });
         const directory =
           macUpdates?.backupDirectory ??
           join(app.getPath("userData"), "backups", "pre-update-" + Date.now());
