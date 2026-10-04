@@ -281,15 +281,17 @@ it("coalesces calculation until every due region scan has finished; filter-only 
   const q = new Scheduler(() => now, () => 0, 1);
   q.schedule("market:region-a", 2, now, async () => now + 300000);
   q.schedule("market:region-b", 2, now, async () => now + 300000);
-  const shouldRun = (needsCalculation: boolean) =>
+  const shouldRun = (needsCalculation: boolean, hasPreparedOffers = true) =>
     shouldStartMarketCalculation({
       needsCalculation,
       busy: false,
       retryReady: true,
+      hasPreparedOffers,
       marketSyncPending: q.hasDuePrefix("market:"),
     });
 
   expect(q.hasDuePrefix("market:")).toBe(true);
+  expect(shouldRun(true, false)).toBe(true);
   expect(shouldRun(true)).toBe(false);
   expect(shouldRun(false)).toBe(false);
   await q.tick();

@@ -133,6 +133,7 @@ function liveCandidates() {
       needsCalculation: mustCalculate,
       busy: calculationBusy,
       retryReady,
+      hasPreparedOffers: preparedReady,
       marketSyncPending: market.hasPendingMarketSync(),
     })
   ) {

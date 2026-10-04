@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-04T09:05:04.030Z
+UTC: 2026-10-04T09:18:31.707Z
 
-Commit: 9c824decb6f05923199d1876a344226fbb4a522f; проверяется рабочее дерево.
+Commit: a75f1f70c095a77ae7b7814fc3991df5041db078; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -33,8 +33,12 @@ Exit code: 0; PASS
 
  Test Files  9 passed (9)
       Tests  39 passed (39)
-   Start at  16:05:24
-   Duration  1.55s (transform 48%, import 41%, tests 8%, worker 3%)
+   Start at  16:18:53
+   Duration  1.84s (transform 47%, import 40%, tests 10%, worker 3%)
+
+  Transform  transforming modules took 2.61s · 47% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns
 
 $ vitest run tests/unit
 
@@ -51,8 +55,8 @@ Exit code: 0; PASS
 
  Test Files  12 passed (12)
       Tests  34 passed (34)
-   Start at  16:05:27
-   Duration  8.48s (import 60%, tests 28%, transform 11%, worker 1%)
+   Start at  16:18:57
+   Duration  10.18s (import 68%, tests 24%, transform 7%)
 
 $ vitest run tests/integration
 
@@ -72,7 +76,7 @@ dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
 dist/renderer/assets/index-CPJ5PQp-.css   24.11 kB │ gzip:   5.55 kB
 dist/renderer/assets/index-2tvkOKze.js   441.39 kB │ gzip: 139.65 kB
 
-✓ built in 615ms
+✓ built in 686ms
 $ node scripts/build.mjs
 
 ```
@@ -85,15 +89,15 @@ Exit code: 0; PASS
 
 Running 4 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (8.6s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (4.4s)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (10.1s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (5.4s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (6.9s)
+  ✓  4 tests/e2e/shell.spec.ts:5:1 › stage 1: three tabs, restricted preload, settings survive restart; 1280 and 1440 (8.5s)
 
   1 skipped
-  3 passed (23.7s)
+  3 passed (28.9s)
 $ playwright test
-(node:66012) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:73930) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```
