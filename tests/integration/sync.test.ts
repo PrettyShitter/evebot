@@ -5,6 +5,7 @@ import { EsiClient } from "../../engine/esi/client";
 import { syncRegion, latestOrders } from "../../engine/market/snapshots";
 import { Scheduler } from "../../engine/esi/scheduler";
 import { summarize } from "../../engine/history/history";
+import { shouldStartMarketCalculation } from "../../engine/market/calculation-gate";
 const order = (id: number) => ({
   order_id: id,
   type_id: 34,
@@ -84,6 +85,33 @@ it("fetches paginated region orders concurrently in a bounded window", async () 
     expect(maximumActive).toBeGreaterThan(1);
     expect(maximumActive).toBeLessThanOrEqual(8);
     expect(latestOrders(s, ["1"]).orders).toHaveLength(9);
+  } finally {
+    s.close();
+  }
+});
+it("omits excluded commodity orders from new snapshots", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  const client = new EsiClient(
+    async () =>
+      new Response(JSON.stringify([order(1)]), {
+        headers: {
+          "X-Pages": "1",
+          "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT",
+          "Cache-Control": "max-age=1",
+        },
+      }),
+  );
+  try {
+    const result = await syncRegion(
+      s,
+      client,
+      "1",
+      Date.now,
+      undefined,
+      new Set(["34"]),
+    );
+    expect(result.count).toBe(0);
+    expect(latestOrders(s, ["1"]).orders).toEqual([]);
   } finally {
     s.close();
   }
@@ -247,6 +275,30 @@ it("an explicit rescan brings a not-yet-due scheduled market job forward", async
   });
   await q.tick();
   expect(runs).toBe(1);
+});
+it("coalesces calculation until every due region scan has finished; filter-only changes stay cheap", async () => {
+  let now = 1000;
+  const q = new Scheduler(() => now, () => 0, 1);
+  q.schedule("market:region-a", 2, now, async () => now + 300000);
+  q.schedule("market:region-b", 2, now, async () => now + 300000);
+  const shouldRun = (needsCalculation: boolean) =>
+    shouldStartMarketCalculation({
+      needsCalculation,
+      busy: false,
+      retryReady: true,
+      marketSyncPending: q.hasDuePrefix("market:"),
+    });
+
+  expect(q.hasDuePrefix("market:")).toBe(true);
+  expect(shouldRun(true)).toBe(false);
+  expect(shouldRun(false)).toBe(false);
+  await q.tick();
+  expect(q.hasDuePrefix("market:")).toBe(true);
+  expect(shouldRun(true)).toBe(false);
+  now += 1000;
+  await q.tick();
+  expect(q.hasDuePrefix("market:")).toBe(false);
+  expect(shouldRun(true)).toBe(true);
 });
 it("history missing is unknown and observed days are not fabricated", () => {
   expect(summarize([], 30, "2026-10-02T00:00:00Z")).toBeNull();

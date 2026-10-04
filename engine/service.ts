@@ -12,6 +12,7 @@ import {
 } from "./market/static-data";
 import { syncRegion, latestSnapshots } from "./market/snapshots";
 import { syncHistory } from "./history/history";
+import { excludedMarketTypeIds } from "./market/classification";
 export class MarketService {
   readonly client = new EsiClient();
   readonly scheduler = new Scheduler();
@@ -50,6 +51,7 @@ export class MarketService {
   scan(force = false) {
     if (this.demo) return;
     if (!this.data) throw Error("Справочник отсутствует");
+    const excludedTypes = excludedMarketTypeIds(this.data);
     const snapshots = new Map(
       latestSnapshots(this.store, this.data.regions).map((snapshot) => [
         snapshot.region,
@@ -75,6 +77,7 @@ export class MarketService {
               region,
               Date.now,
               this.searchLocations,
+              excludedTypes,
             );
             this.status = "Рынок обновлён; история загружается отдельно";
             this.queueHistory(region);
@@ -85,6 +88,9 @@ export class MarketService {
           }
         },
       );
+  }
+  hasPendingMarketSync() {
+    return this.scheduler.hasDuePrefix("market:");
   }
   private queueHistory(region: string) {
     const generation = latestSnapshots(this.store, [region])[0];
@@ -98,13 +104,15 @@ export class MarketService {
           .all(generation.id) as { type_id: string }[]
       ).map((row) => row.type_id),
     );
+    const excluded = this.data ? excludedMarketTypeIds(this.data) : new Set();
     for (const type of types)
-      this.scheduler.schedule(
-        "history:" + region + ":" + type,
-        3,
-        Date.now(),
-        () => syncHistory(this.store, this.client, type, region),
-      );
+      if (!excluded.has(type))
+        this.scheduler.schedule(
+          "history:" + region + ":" + type,
+          3,
+          Date.now(),
+          () => syncHistory(this.store, this.client, type, region),
+        );
   }
   async updateStatic() {
     if (this.demo) throw Error("Обновление SDE недоступно в DEMO");

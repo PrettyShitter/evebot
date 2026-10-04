@@ -80,28 +80,20 @@ export function seedDemo(store: Store) {
     ],
     types: [
       {
-        id: "34",
-        name: "Tritanium",
-        englishName: "Tritanium",
-        groupId: "18",
-        marketGroupId: "1857",
-        volume: ".01",
-      },
-      {
-        id: "35",
-        name: "Pyerite",
-        englishName: "Pyerite",
-        groupId: "18",
-        marketGroupId: "1857",
-        volume: ".01",
-      },
-      {
         id: "587",
         name: "Rifter",
         englishName: "Rifter",
         groupId: "25",
         marketGroupId: "64",
         volume: "2500",
+      },
+      {
+        id: "2046",
+        name: "Damage Control I",
+        englishName: "Damage Control I",
+        groupId: "60",
+        marketGroupId: "615",
+        volume: "5",
       },
     ],
   };
@@ -144,7 +136,7 @@ export function seedDemo(store: Store) {
       );
     for (const station of data.stations.filter((s) => s.regionId === region))
       for (const type of data.types) {
-        const base = type.id === "587" ? 300000 : type.id === "34" ? 4 : 20;
+        const base = type.id === "587" ? 300000 : 4;
         const factor =
           station.id === "60003760"
             ? 1
@@ -186,8 +178,7 @@ export function seedDemo(store: Store) {
         const date = new Date(Date.parse(DEMO_TIME) - day * 86400000)
           .toISOString()
           .slice(0, 10);
-        const avg =
-          type.id === "587" ? "450000" : type.id === "34" ? "6" : "30";
+        const avg = type.id === "587" ? "450000" : "6";
         store.sql
           .prepare("INSERT INTO regional_history VALUES (?,?,?,?,?)")
           .run(

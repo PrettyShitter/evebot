@@ -400,6 +400,30 @@ function App() {
                   />
                 </label>
               </div>
+              <div className="settings-grid">
+                <label className="field">
+                  Ожидаемых перевыставлений в день
+                  <Input
+                    type="number"
+                    min="0"
+                    max="24"
+                    value={draft.relistPerDay}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        relistPerDay: Math.max(
+                          0,
+                          Math.min(24, Number(e.target.value)),
+                        ),
+                      })
+                    }
+                  />
+                  <small className="caption">
+                    Умножается на прогнозируемый период продажи до 3 дней и
+                    входит в расчёт комиссии passive sell.
+                  </small>
+                </label>
+              </div>
               <Button
                 variant="outline"
                 disabled={busy}

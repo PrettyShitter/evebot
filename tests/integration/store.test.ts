@@ -56,3 +56,13 @@ it("IPC rejects arbitrary SQL, network, path and unrecognized settings", () => {
   ])
     expect(requestSchema.safeParse(payload).success).toBe(false);
 });
+it("removes the former per-item budget cap from settings on legacy installs", () => {
+  const store = new Store(":memory:", resolve("db/migrations"));
+  try {
+    store.saveSettings({ ...DEFAULT_SETTINGS, maxTypeShare: 0.2 });
+    expect(store.getSettings().maxTypeShare).toBe(1);
+    expect(DEFAULT_SETTINGS.maxTypeShare).toBe(1);
+  } finally {
+    store.close();
+  }
+});

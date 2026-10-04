@@ -10,12 +10,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "./components/ui/dialog";
-import {
-  ShoppingBasket,
-  ArrowUpRight,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { ShoppingBasket, ArrowUpRight, RefreshCw, X } from "lucide-react";
 import type { AppState, AppRequest, Settings } from "../shared/contracts/app";
 import type { Opportunity } from "../engine/market/opportunities";
 import { mergeOfferRows } from "./market-list";
@@ -147,12 +142,14 @@ export function MarketView({
         </Button>
       </div>
       <div className="caption mt-3 mb-5">
-        {rows.length} предложений · профит от {money(state.settings.minProfit)} ISK · ROI от {state.settings.minROI}%
+        {rows.length} предложений · профит от {money(state.settings.minProfit)}{" "}
+        ISK · ROI от {state.settings.minROI}%
       </div>
       <section className="market-panel">
         <div className="table-intro">
           <span>
-            Прибыль после налогов и комиссий · перевозка не включена
+            Автосортировка: прибыль на капитал/день с учётом ликвидности и
+            тренда · перевозка не включена
           </span>
           {state.market.calculation.busy && (
             <div className="offer-progress" role="status" aria-live="polite">
@@ -171,8 +168,10 @@ export function MarketView({
                       <span>
                         {Math.floor(
                           (100 * progress.processed) / progress.total,
-                        )}% · {progress.processed}/{progress.total} товаров
-                        {remaining !== null && ` · осталось около ${remaining} сек.`}
+                        )}
+                        % · {progress.processed}/{progress.total} товаров
+                        {remaining !== null &&
+                          ` · осталось около ${remaining} сек.`}
                       </span>
                     )}
                   </div>
@@ -191,7 +190,7 @@ export function MarketView({
           )}
         </div>
         <div className="market-row table-header" role="row">
-          <span>Товар / направление</span>
+          <span>Авто-рейтинг / товар / направление</span>
           <span className="numeric">Купить / доступно</span>
           <span className="numeric">Закупка, ISK</span>
           <span className="numeric">Прибыль сразу, ISK</span>
@@ -210,7 +209,7 @@ export function MarketView({
               return (
                 <button
                   className="market-row data-row"
-                  disabled={busy || !currentIds.has(o.id)}
+                  disabled={!currentIds.has(o.id)}
                   key={o.id}
                   onClick={() => void show(o)}
                   style={{
@@ -246,6 +245,17 @@ export function MarketView({
                     <small>
                       {o.source.name.split(" - ")[0]} <ArrowUpRight size={11} />{" "}
                       {o.destination.name.split(" - ")[0]}
+                    </small>
+                    <small>
+                      {o.strategy === "instant"
+                        ? "Мгновенная продажа"
+                        : "Пассивный sell-ордер"}{" "}
+                      · {o.profitPerDay}% капитала/день
+                    </small>
+                    <small>
+                      Авто-рейтинг {o.rankingScore} · тренд{" "}
+                      {o.trendAdjustment > 0 ? "+" : ""}
+                      {o.trendAdjustment}%
                     </small>
                   </span>
                   <span className="numeric">
@@ -296,16 +306,27 @@ export function MarketView({
                     </small>
                   </span>
                   <span className="caption">
-                    {o.buy.fullROI !== null
-                      ? "Buy покрывает 100%"
-                      : o.liquidity.reasons[0]}
+                    Регион: {o.liquidity.regional?.activeDays ?? 0}/
+                    {o.liquidity.regional?.observedDays ?? 0} активных дней
                     <small>
-                      {o.liquidity.sellQuantity >= o.quantity
-                        ? "Sell: прогноз на партию"
-                        : o.liquidity.sellQuantity > 0
-                          ? `Sell: до ${money(String(o.liquidity.sellQuantity))} шт.`
-                          : "Sell: мало данных"}
+                      Хаб: buy{" "}
+                      {money(String(o.liquidity.local?.bidQuantity ?? 0))} ·
+                      sell {money(String(o.liquidity.local?.askQuantity ?? 0))}{" "}
+                      шт.
                     </small>
+                    {o.liquidity.riskFlags?.length > 0 && (
+                      <small className="risk-text">
+                        ⚠ {o.liquidity.riskFlags[0]}
+                      </small>
+                    )}
+                    {!o.liquidity.riskFlags?.length && (
+                      <small>
+                        Данные{" "}
+                        {o.liquidity.regional?.ageDays === null
+                          ? "неизвестной свежести"
+                          : `${o.liquidity.regional?.ageDays.toFixed(1)} дн.`}
+                      </small>
+                    )}
                   </span>
                 </button>
               );
@@ -555,8 +576,9 @@ export function MarketView({
               <div className="text-sm space-y-2">
                 <p>
                   Налог продажи: {money(preview.sell.tax, 2)} · выставление:{" "}
-                  {money(preview.sell.listing, 2)} · изменения цены:{" "}
-                  {money(preview.sell.relisting, 2)} ISK
+                  {money(preview.sell.listing, 2)} · перевыставления:{" "}
+                  {money(preview.sell.relisting, 2)} ISK ({preview.relistCount}{" "}
+                  изменений цены, текущая модель — до 3 дней)
                 </p>
                 <p>
                   Стресс −5%:{" "}
@@ -573,15 +595,68 @@ export function MarketView({
                   ROI = чистая прибыль / (закупка + размещение + изменения).
                   Перевозка не входит в v1.
                 </p>
-                <p>{preview.liquidity.reasons.join(" · ")}</p>
                 <p className="caption">
-                  Регион {preview.destination.regionId} · медиана дневного
-                  оборота{" "}
-                  {preview.liquidity.history?.medianDailyVolume ?? "неизвестна"}{" "}
-                  · наблюдаемых дней{" "}
-                  {preview.liquidity.history?.observedDays ?? 0}/30. Это не
-                  оборот станции.
+                  Региональная история {preview.destination.regionId}: медиана
+                  дневного оборота{" "}
+                  {preview.liquidity.regional?.medianDailyVolume ??
+                    "неизвестна"}
+                  , активность {preview.liquidity.regional?.activeDays ?? 0}/
+                  {preview.liquidity.regional?.observedDays ?? 0} дней,
+                  обновлена{" "}
+                  {preview.liquidity.regional?.newestDate ?? "нет данных"}.
+                  Региональный объём не равен обороту станции.
                 </p>
+                <p className="caption">
+                  Глубина хаба назначения: buy{" "}
+                  {money(String(preview.liquidity.local?.bidQuantity ?? 0))}{" "}
+                  шт., sell{" "}
+                  {money(String(preview.liquidity.local?.askQuantity ?? 0))}{" "}
+                  шт.; конкурирующий sell-объём по целевой цене{" "}
+                  {money(
+                    String(preview.liquidity.local?.competitorQuantity ?? 0),
+                  )}{" "}
+                  шт. Наблюдений приложения:{" "}
+                  {preview.liquidity.local?.observations ?? 0}.
+                </p>
+                <p className="caption">
+                  Ликвидность: {preview.liquidity.reasons.join(" · ")} ·
+                  уверенность {preview.liquidity.confidence}. Ожидаемый оборот
+                  партии {preview.expectedDaysToTurnover.toFixed(1)} дн.;
+                  эффективность капитала {preview.profitPerDay}% в день
+                  (оценка).
+                </p>
+                <p className="caption">
+                  Авто-рейтинг {preview.rankingScore}: эффективность капитала с
+                  поправками на активность и свежесть истории, динамику
+                  объёма/цены и предупреждения стакана. Поправка тренда{" "}
+                  {preview.trendAdjustment > 0 ? "+" : ""}
+                  {preview.trendAdjustment}%.
+                </p>
+                {!!preview.liquidity.riskFlags?.length && (
+                  <div className="risk-panel">
+                    <strong>Риски рынка</strong>
+                    {preview.liquidity.riskFlags.map((risk) => (
+                      <p key={risk}>⚠ {risk}</p>
+                    ))}
+                  </div>
+                )}
+                <details>
+                  <summary>Профиль продавца для станции назначения</summary>
+                  <p>
+                    Accounting {preview.seller.accounting}/5 · Broker Relations{" "}
+                    {preview.seller.brokerRelations}/5 · Advanced Broker
+                    Relations {preview.seller.advancedBrokerRelations}/5
+                  </p>
+                  <p>
+                    Standings: фракция {preview.seller.factionStanding},
+                    корпорация {preview.seller.corporationStanding}
+                  </p>
+                  <p>
+                    Применённые ставки: налог {Number(preview.taxRate) * 100}% ·
+                    брокер {Number(preview.feeRate) * 100}% · скидка Advanced
+                    Broker Relations {Number(preview.relistDiscount) * 100}%
+                  </p>
+                </details>
                 <details>
                   <summary>Региональная история 7 / 30 / 90 дней</summary>
                   {Object.entries(preview.historyWindows ?? {}).map(
@@ -594,7 +669,7 @@ export function MarketView({
                             : "90"}{" "}
                         дней:{" "}
                         {h
-                          ? `данные за ${h.observedDays} дней, пропуски ${h.missingDays}, медиана объёма ${h.medianDailyVolume}, цены ${h.medianDailyPrice} ISK`
+                          ? `данные за ${h.observedDays} дней, активность ${h.activeDays}, пропуски ${h.missingDays}, медиана объёма ${h.medianDailyVolume}, цена ${h.medianDailyPrice} ISK, изменение ${h.priceChange === null ? "н/д" : `${(Number(h.priceChange) * 100).toFixed(1)}%`}`
                           : "нет данных"}
                       </p>
                     ),

@@ -13,6 +13,11 @@ it("stage 6: per-deal routes and independent child survive restart", () => {
   let s = new Store(path, resolve("db/migrations"));
   try {
     seedDemo(s);
+    s.saveSettings({
+      ...s.getSettings(),
+      minProfit: "0",
+      minTripProfit: "0",
+    });
     const data = readStatic(s)!;
     let t = new Trades(s, () => data);
     const all = demoScan(s);
@@ -26,7 +31,7 @@ it("stage 6: per-deal routes and independent child survive restart", () => {
       (o) =>
         o.source.id === "60000001" &&
         o.destination.id === "60008494" &&
-        o.type.id === "35",
+        o.type.id === "2046",
     )!;
     expect(parent).toBeTruthy();
     expect(child).toBeTruthy();

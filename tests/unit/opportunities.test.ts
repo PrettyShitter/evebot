@@ -121,3 +121,85 @@ describe("scanOpportunities minimum-profit pruning", () => {
     });
   });
 });
+
+it("skips mineral and ore market groups before scoring while retaining ice products", () => {
+  const base = inputs(
+    "0",
+    vi.fn(() => []),
+  );
+  const oreTypes = [
+    {
+      id: "34",
+      name: "Tritanium",
+      englishName: "Tritanium",
+      groupId: "18",
+      marketGroupId: "1857",
+      volume: ".01",
+    },
+    {
+      id: "1230",
+      name: "Veldspar",
+      englishName: "Veldspar",
+      groupId: "462",
+      marketGroupId: "518",
+      volume: ".1",
+    },
+    {
+      id: "62516",
+      name: "Compressed Veldspar",
+      englishName: "Compressed Veldspar",
+      groupId: "462",
+      marketGroupId: "518",
+      volume: ".001",
+    },
+    {
+      id: "1000",
+      name: "Moon Ore",
+      englishName: "Moon Ore",
+      groupId: "123",
+      marketGroupId: "2396",
+      volume: ".1",
+    },
+    {
+      id: "900",
+      name: "Ice Product",
+      englishName: "Ice Product",
+      groupId: "423",
+      marketGroupId: "1033",
+      volume: "1",
+    },
+  ];
+  const withOrders = oreTypes.flatMap((type, index) => {
+    const [ask, bid] = base.orders;
+    return [
+      { ...ask, order_id: String(10 + index * 2), type_id: type.id },
+      { ...bid, order_id: String(11 + index * 2), type_id: type.id },
+    ];
+  });
+  const history = vi.fn((_type: string, _region: string) => []);
+  const result = scanOpportunities({
+    ...base,
+    data: {
+      ...base.data,
+      types: [...base.data.types, ...oreTypes],
+      marketGroups: [
+        { id: "1857", name: "Minerals", parentId: null },
+        { id: "54", name: "Standard Ores", parentId: null },
+        { id: "518", name: "Veldspar", parentId: "54" },
+        { id: "2395", name: "Moon Ores", parentId: null },
+        { id: "2396", name: "Moon Ore", parentId: "2395" },
+        { id: "1033", name: "Ice Products", parentId: null },
+      ],
+    },
+    orders: [...base.orders, ...withOrders],
+    history,
+  });
+
+  expect(result.map((offer) => offer.type.id).sort()).toEqual(["42", "900"]);
+  expect(history).toHaveBeenCalledTimes(2);
+  expect(
+    history.mock.calls.some(([type]) =>
+      ["34", "1230", "62516", "1000"].includes(type),
+    ),
+  ).toBe(false);
+});

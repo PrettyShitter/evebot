@@ -124,27 +124,10 @@ export class Trades {
       );
       if (D(totals.cost).plus(fees).gt(portfolio.currentBudget().available))
         throw Error("Недостаточно доступного бюджета");
-      const exposures = this.exposures();
-      const byType = new Map<string, string>();
       for (const o of items) {
-        byType.set(
-          o.type.id,
-          isk(D(byType.get(o.type.id) ?? 0).plus(o.purchase.total)),
-        );
         if (o.quantity > o.maximum || o.purchase.filled !== o.quantity)
           throw Error("Партия превышает доступную глубину");
       }
-      for (const [type, cost] of byType)
-        if (
-          D(cost)
-            .plus(exposures.get(type) ?? 0)
-            .gt(
-              D(portfolio.currentBudget().pool).mul(
-                this.store.getSettings().maxTypeShare,
-              ),
-            )
-        )
-          throw Error("Превышен лимит одного товара");
       const settings = this.store.getSettings();
       for (const o of items) {
         const result = o.rankedBy === "buy" ? o.buy.result : o.sell;

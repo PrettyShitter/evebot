@@ -2,7 +2,7 @@ import { parentPort, workerData } from "node:worker_threads";
 import { join } from "node:path";
 import { Store } from "../db/store";
 import { readStatic } from "./market/static-data";
-import { scanOpportunities, filterOpportunities } from "./market/opportunities";
+import { scanOpportunities } from "./market/opportunities";
 import { latestOrders, latestSnapshots } from "./market/snapshots";
 import { stationProfile, type ProfileData } from "./portfolio/profile";
 import { Portfolio } from "./portfolio/repository";
@@ -209,11 +209,9 @@ parentPort!.on("message", (message: { kind: string }) => {
         market.data = readStatic(store);
         previous = calculate(previous);
       }
-      const settings = store.getSettings();
       return {
         key: previous.key,
-        filtered: filterOpportunities(previous.offers, settings),
-        filterSignature: JSON.stringify(settings),
+        offers: previous.offers,
         scanFloor: previous.floor,
       };
     })();

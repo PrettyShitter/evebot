@@ -75,4 +75,9 @@ export class Scheduler {
       attempts,
     }));
   }
+  hasDuePrefix(prefix: string) {
+    return [...this.jobs.values()].some(
+      (job) => job.key.startsWith(prefix) && job.due <= this.clock(),
+    );
+  }
 }

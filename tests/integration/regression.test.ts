@@ -32,15 +32,15 @@ for (const buyer of ["90000001", "90000002"])
         const p = new Portfolio(s);
         const offers = demoScan(s);
         const ship = offers.find((o) => o.type.id === "587")!;
-        const mineral = offers.find(
+        const module = offers.find(
           (o) =>
-            o.type.id === "34" &&
+            o.type.id === "2046" &&
             o.source.id === ship.source.id &&
             o.destination.id === ship.destination.id,
         )!;
         trades.accept("multi", [
           selectQuantity(ship, 20),
-          selectQuantity(mineral, 1000),
+          selectQuantity(module, 1000),
         ]);
         const at = new Date(Date.now() + 1000).toISOString();
         const wallets: WalletData[] = [
@@ -74,7 +74,7 @@ for (const buyer of ["90000001", "90000002"])
         const w = wallets.find((w) => w.id === buyer)!;
         for (const [index, type, q, price] of [
           [0, "587", 20, "100"],
-          [1, "34", 1000, "2"],
+          [1, "2046", 1000, "2"],
         ] as const) {
           const id = String(100 + index);
           w.transactions.push({
@@ -112,7 +112,7 @@ for (const buyer of ["90000001", "90000002"])
         for (const [id, type, q, price, tax] of [
           ["200", "587", 12, "150", "90"],
           ["201", "587", 8, "150", "60"],
-          ["202", "34", 1000, "3", "150"],
+          ["202", "2046", 1000, "3", "150"],
         ] as const) {
           const tx = {
             transaction_id: id,
@@ -129,21 +129,19 @@ for (const buyer of ["90000001", "90000002"])
           s.sql
             .prepare("INSERT INTO wallet_transactions VALUES (?,?,?,?,?)")
             .run("esi", "90000001", id, JSON.stringify(tx), at);
-          s.sql
-            .prepare("INSERT INTO wallet_journal VALUES (?,?,?,?)")
-            .run(
-              "90000001",
-              id + "1",
-              JSON.stringify({
-                id: id + "1",
-                date: at,
-                ref_type: "transaction_tax",
-                amount: "-" + tax,
-                context_id: id,
-                context_id_type: "market_transaction_id",
-              }),
-              at,
-            );
+          s.sql.prepare("INSERT INTO wallet_journal VALUES (?,?,?,?)").run(
+            "90000001",
+            id + "1",
+            JSON.stringify({
+              id: id + "1",
+              date: at,
+              ref_type: "transaction_tax",
+              amount: "-" + tax,
+              context_id: id,
+              context_id_type: "market_transaction_id",
+            }),
+            at,
+          );
           r.run();
           if (id === "200") {
             expect(trades.list()[0].result.remaining).toBe(1008);

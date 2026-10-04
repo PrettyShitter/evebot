@@ -20,6 +20,7 @@ import {
 } from "./fees";
 import { summarize } from "../history/history";
 import { liquidity } from "../liquidity/model";
+import { excludedMarketTypeIds } from "./classification";
 import type { Settings } from "../../shared/contracts/app";
 export interface Opportunity {
   id: string;
@@ -48,6 +49,18 @@ export interface Opportunity {
   relistDiscount: string;
   relistCount: number;
   rankedBy: "buy" | "sell";
+  strategy: "instant" | "passive";
+  expectedDaysToTurnover: number;
+  profitPerDay: string;
+  rankingScore: string;
+  trendAdjustment: number;
+  seller: {
+    accounting: number;
+    brokerRelations: number;
+    advancedBrokerRelations: number;
+    factionStanding: string;
+    corporationStanding: string;
+  };
   at: string;
   formulaVersion: string;
   features: {
@@ -62,7 +75,14 @@ export interface Opportunity {
 export function calculateOpportunity(
   base: Omit<
     Opportunity,
-    "purchase" | "buy" | "sell" | "volume" | "stress5" | "stress10"
+    | "purchase"
+    | "buy"
+    | "sell"
+    | "volume"
+    | "stress5"
+    | "stress10"
+    | "rankingScore"
+    | "trendAdjustment"
   >,
   quantity: number,
 ): Opportunity {
@@ -98,12 +118,56 @@ export function calculateOpportunity(
   return {
     ...base,
     quantity,
+    rankingScore: "0",
+    trendAdjustment: 0,
     purchase,
     buy,
     sell,
     volume: cargo([{ quantity, volume: base.type.volume }]),
     stress5: stress(".95"),
     stress10: stress(".90"),
+  };
+}
+function strategyEfficiency(
+  profit: string,
+  capital: string,
+  days: number,
+): Decimal {
+  return D(capital).gt(0)
+    ? D(profit).div(capital).div(Math.max(1, days))
+    : D(0);
+}
+function passiveDays(quantity: number, sellQuantity: number): number {
+  return Math.max(1, quantity / Math.max(1, sellQuantity / 3));
+}
+function autoRankScore(
+  profitPerDay: string,
+  liquidity: Opportunity["liquidity"],
+  history: Opportunity["historyWindows"],
+): { score: string; trendAdjustment: number } {
+  const week = history.week?.medianDailyVolume;
+  const month = history.month?.medianDailyVolume;
+  const volumeRatio =
+    week && month && D(month).gt(0) ? D(week).div(month).toNumber() : 1;
+  const volumeTrend = Math.max(0.6, Math.min(1.2, 0.8 + volumeRatio * 0.2));
+  const priceChange = Number(history.month?.priceChange ?? 0);
+  const priceTrend = Math.max(0.75, Math.min(1.1, 1 + priceChange * 0.5));
+  const trendAdjustment = Math.round((volumeTrend * priceTrend - 1) * 100);
+  const confidence =
+    liquidity.confidence === "высокая"
+      ? 1
+      : liquidity.confidence === "средняя"
+        ? 0.75
+        : 0.4;
+  const riskFactor = Math.max(0.35, 1 - liquidity.riskFlags.length * 0.15);
+  return {
+    score: D(profitPerDay)
+      .mul(confidence)
+      .mul(riskFactor)
+      .mul(volumeTrend)
+      .mul(priceTrend)
+      .toFixed(4),
+    trendAdjustment,
   };
 }
 export interface ScanInputs {
@@ -132,12 +196,18 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
   const graph = new Graph(data.systems),
     stations = new Map(data.stations.map((s) => [s.id, s])),
     types = new Map(data.types.map((t) => [t.id, t]));
+  const excludedTypes = excludedMarketTypeIds(data);
   const asks = new Map<string, Map<string, Level[]>>(),
     bids = new Map<string, Map<string, Level[]>>();
   const reachCache = new Map<string, string[]>();
   const npcIds = new Set(data.npcStationIds ?? data.stations.map((s) => s.id));
   for (const o of orders) {
-    if (!types.has(o.type_id) || o.volume_remain <= 0) continue;
+    if (
+      !types.has(o.type_id) ||
+      excludedTypes.has(o.type_id) ||
+      o.volume_remain <= 0
+    )
+      continue;
     const level: Level = Object.freeze({
       id: o.order_id,
       price: o.price,
@@ -239,7 +309,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
     const typeBudget = Decimal.max(
       0,
       D(input.pool)
-        .mul(settings.maxTypeShare)
+        .mul(1)
         .minus(input.exposures.get(typeId) ?? 0),
     );
     const allowance = Decimal.min(input.available, typeBudget);
@@ -340,6 +410,8 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           sellRate,
           demandQuantity,
         } = terms;
+        const seller = profiles.get(destinationId);
+        if (!seller) continue;
         let buyPossible = bestBid
           .mul(D(1).minus(fee.tax))
           .gte(requiredNetPrice);
@@ -395,6 +467,13 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
               competitorQuantity: targetAsks
                 .filter((a) => D(a.price).lte(target))
                 .reduce((s, a) => s + a.quantity, 0),
+              localAskQuantity: targetAsks.reduce((s, a) => s + a.quantity, 0),
+              largestAskQuantity: Math.max(
+                0,
+                ...targetAsks.map((a) => a.quantity),
+              ),
+              bestBid: bestBid.toFixed(),
+              bestAsk: bestAsks.get(destinationId)?.toFixed() ?? "0",
               observations:
                 input.local?.(typeId, destination.id).observations ?? 0,
               confirmedSales:
@@ -403,6 +482,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
             target,
           );
         liquidities.set(destinationId, l);
+        const offerLiquidity = { ...l, riskFlags: [...l.riskFlags] };
         if (!windows.has(historyKey))
           windows.set(historyKey, {
             week: summarize(history, 7, input.at),
@@ -436,13 +516,17 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           demand,
           sellPrice: target,
           destinationAsks: sortedAsks,
-          liquidity: l,
+          liquidity: offerLiquidity,
           historyWindows: windows.get(historyKey)!,
           feeRate: fee.broker.toFixed(),
           taxRate: fee.tax.toFixed(),
           relistDiscount: fee.discount.toFixed(),
           relistCount: settings.relistPerDay * 3,
           rankedBy: "buy" as const,
+          strategy: "instant" as const,
+          expectedDaysToTurnover: 1,
+          profitPerDay: "0",
+          seller: { ...seller },
           at: input.at,
           formulaVersion: FORMULA_VERSION,
           features: {
@@ -483,22 +567,69 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
           (settings.sort === "sell" && !sellEligible)
         )
           continue;
+        const buyScore = strategyEfficiency(
+          o.buy.result.profit,
+          o.purchase.total,
+          1,
+        );
+        const sellCapital = isk(
+          D(o.purchase.total).plus(o.sell.listing).plus(o.sell.relisting),
+        );
+        const sellScore = strategyEfficiency(
+          o.sell.profit,
+          sellCapital,
+          passiveDays(quantity, l.sellQuantity),
+        );
         o.rankedBy =
-          settings.sort === "sell" ||
-          (settings.sort === "best" &&
-            sellEligible &&
-            (!buyEligible || D(o.sell.profit).gt(o.buy.result.profit)))
+          settings.sort === "sell"
             ? "sell"
-            : "buy";
+            : settings.sort === "buy"
+              ? "buy"
+              : sellEligible && (!buyEligible || sellScore.gt(buyScore))
+                ? "sell"
+                : "buy";
+        o.strategy = o.rankedBy === "buy" ? "instant" : "passive";
+        // Passive sell-through is an estimate from the regional daily median,
+        // limited by the local 3-day depth forecast. Instant liquidation is
+        // normalized to one day so ROI and capital velocity remain comparable.
+        o.expectedDaysToTurnover =
+          o.strategy === "instant" ? 1 : passiveDays(quantity, l.sellQuantity);
+        const chosenProfit =
+          o.rankedBy === "buy" ? o.buy.result.profit : o.sell.profit;
+        const chosenCapital =
+          o.rankedBy === "buy"
+            ? o.purchase.total
+            : isk(
+                D(o.purchase.total).plus(o.sell.listing).plus(o.sell.relisting),
+              );
+        o.profitPerDay = D(chosenProfit)
+          .div(chosenCapital)
+          .div(o.expectedDaysToTurnover)
+          .mul(100)
+          .toFixed(4);
+        if (
+          offerLiquidity.local.bidQuantity < quantity &&
+          !offerLiquidity.riskFlags.includes("Текущий buy-стакан меньше партии")
+        )
+          offerLiquidity.riskFlags.push("Текущий buy-стакан меньше партии");
+        const ranking = autoRankScore(
+          o.profitPerDay,
+          offerLiquidity,
+          o.historyWindows,
+        );
+        o.rankingScore = ranking.score;
+        o.trendAdjustment = ranking.trendAdjustment;
         result.push(o);
       }
     }
   }
   return result.sort(
     (a, b) =>
+      D(b.rankingScore).comparedTo(a.rankingScore) ||
       D(b.rankedBy === "buy" ? b.buy.result.profit : b.sell.profit).comparedTo(
         a.rankedBy === "buy" ? a.buy.result.profit : a.sell.profit,
-      ) || a.id.localeCompare(b.id),
+      ) ||
+      a.id.localeCompare(b.id),
   );
 }
 export function basketTotals(items: Opportunity[]) {
@@ -605,19 +736,63 @@ export function filterOpportunities(
       (settings.sort === "sell" && !sell)
     )
       continue;
+    const buyScore = strategyEfficiency(
+      o.buy.result.profit,
+      o.purchase.total,
+      1,
+    );
+    const sellCapital = isk(
+      D(o.purchase.total).plus(o.sell.listing).plus(o.sell.relisting),
+    );
+    const sellScore = strategyEfficiency(
+      o.sell.profit,
+      sellCapital,
+      passiveDays(quantity, o.liquidity.sellQuantity),
+    );
     o.rankedBy =
-      settings.sort === "sell" ||
-      (settings.sort === "best" &&
-        sell &&
-        (!buy || D(o.sell.profit).gt(o.buy.result.profit)))
+      settings.sort === "sell"
         ? "sell"
-        : "buy";
+        : settings.sort === "buy"
+          ? "buy"
+          : sell && (!buy || sellScore.gt(buyScore))
+            ? "sell"
+            : "buy";
+    o.strategy = o.rankedBy === "buy" ? "instant" : "passive";
+    o.expectedDaysToTurnover =
+      o.strategy === "instant"
+        ? 1
+        : passiveDays(quantity, o.liquidity.sellQuantity);
+    const chosenProfit =
+      o.rankedBy === "buy" ? o.buy.result.profit : o.sell.profit;
+    const chosenCapital =
+      o.rankedBy === "buy"
+        ? o.purchase.total
+        : isk(D(o.purchase.total).plus(o.sell.listing).plus(o.sell.relisting));
+    o.profitPerDay = D(chosenProfit)
+      .div(chosenCapital)
+      .div(o.expectedDaysToTurnover)
+      .mul(100)
+      .toFixed(4);
+    if (
+      o.liquidity.local.bidQuantity < quantity &&
+      !o.liquidity.riskFlags.includes("Текущий buy-стакан меньше партии")
+    )
+      o.liquidity.riskFlags.push("Текущий buy-стакан меньше партии");
+    const ranking = autoRankScore(
+      o.profitPerDay,
+      o.liquidity,
+      o.historyWindows,
+    );
+    o.rankingScore = ranking.score;
+    o.trendAdjustment = ranking.trendAdjustment;
     result.push(o);
   }
   return result.sort(
     (a, b) =>
+      D(b.rankingScore).comparedTo(a.rankingScore) ||
       D(b.rankedBy === "buy" ? b.buy.result.profit : b.sell.profit).comparedTo(
         a.rankedBy === "buy" ? a.buy.result.profit : a.sell.profit,
-      ) || a.id.localeCompare(b.id),
+      ) ||
+      a.id.localeCompare(b.id),
   );
 }

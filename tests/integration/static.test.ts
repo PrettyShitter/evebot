@@ -4,6 +4,7 @@ import {
   withSearchZone,
   type StaticData,
 } from "../../engine/market/static-data";
+import { excludedMarketTypeIds } from "../../engine/market/classification";
 import { Graph, CENTERS } from "../../engine/routes/graph";
 it("official bundled SDE resolves exact centers and only their NPC stations", () => {
   const source = JSON.parse(
@@ -29,6 +30,19 @@ it("official bundled SDE resolves exact centers and only their NPC stations", ()
   );
   expect(data.types.find((t) => t.id === "587")?.volume).toBe("2500");
   expect(data.types.some((t) => t.id === "44992")).toBe(false);
+});
+
+it("classifies SDE minerals, ordinary and compressed ore for early exclusion", () => {
+  const source = JSON.parse(
+    readFileSync("resources/static-data.json", "utf8"),
+  ) as StaticData;
+  const excluded = excludedMarketTypeIds(source);
+
+  expect(excluded.has("34")).toBe(true); // Tritanium
+  expect(excluded.has("1230")).toBe(true); // Veldspar
+  expect(excluded.has("62516")).toBe(true); // Compressed Veldspar
+  expect(excluded.has("16262")).toBe(false); // Clear Icicle
+  expect(excluded.has("16272")).toBe(false); // Heavy Water
 });
 
 import { Store } from "../../db/store";

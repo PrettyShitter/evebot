@@ -53,7 +53,9 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     const roiFilter = page.getByLabel("Минимальный ROI");
     await roiFilter.fill("30");
     await roiFilter.blur();
-    await expect(page.getByText(/предложений · профит от.*ROI от 30%/)).toBeVisible();
+    await expect(
+      page.getByText(/предложений · профит от.*ROI от 30%/),
+    ).toBeVisible();
     const uiFilterMs =
       (await page.evaluate(() => performance.now())) - uiStarted;
     const metrics = await page.evaluate(async () => {
@@ -79,7 +81,13 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
       // Trigger a full market recomputation while the renderer continues running.
       await window.eve.request({
         kind: "settings.save",
-        value: { ...result.settings, maxTypeShare: 0.21 },
+        value: {
+          ...result.settings,
+          relistPerDay:
+            result.settings.relistPerDay === 24
+              ? 23
+              : result.settings.relistPerDay + 1,
+        },
       });
       clearInterval(timer);
       return {

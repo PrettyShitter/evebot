@@ -24,6 +24,7 @@ import { latestOrders, latestSnapshots } from "./market/snapshots";
 import { stationProfile, type ProfileData } from "./portfolio/profile";
 import type { HistoryDay } from "../shared/contracts/esi";
 import { Portfolio } from "./portfolio/repository";
+import { shouldStartMarketCalculation } from "./market/calculation-gate";
 import { ownSellOrders, replaceActiveOrders } from "./portfolio/orders";
 import type { WalletData } from "./portfolio/sync";
 import { requestSchema, type AppState } from "../shared/contracts/app";
@@ -51,6 +52,7 @@ const trades = new Trades(store, () => market.data);
 const reconciler = new Reconciler(store, () => market.data);
 let cached: Opportunity[] = [];
 let prepared: Opportunity[] = [];
+let preparedReady = false;
 let signature = "";
 let filterSignature = "";
 function filtered() {
@@ -58,7 +60,7 @@ function filtered() {
   const key = JSON.stringify(settings);
   if (key !== filterSignature) {
     filterSignature = key;
-    cached = filterOpportunities(prepared, settings);
+    if (preparedReady) cached = filterOpportunities(prepared, settings);
     saveFeatures(store, cached);
     notifications = [
       ...notifications,
@@ -123,10 +125,16 @@ function liveCandidates() {
     calculationError === "" || Date.now() - calculationAt > 30000;
   const lowerProfitFloor = Number(settings.minProfit) < Number(scanFloor);
   const mustCalculate = key !== signature || lowerProfitFloor;
+  filtered();
+  // Region scans publish snapshots one at a time. Wait for the whole due batch
+  // so each region does not trigger its own expensive full-market pass.
   if (
-    !calculationBusy &&
-    retryReady &&
-    (mustCalculate || filterSignature !== JSON.stringify(settings))
+    shouldStartMarketCalculation({
+      needsCalculation: mustCalculate,
+      busy: calculationBusy,
+      retryReady,
+      marketSyncPending: market.hasPendingMarketSync(),
+    })
   ) {
     calculationBusy = true;
     calculationError = "";
@@ -149,8 +157,7 @@ function liveCandidates() {
         (message: {
           result?: {
             key: string;
-            filtered: Opportunity[];
-            filterSignature: string;
+            offers: Opportunity[];
             scanFloor: string;
           };
           progress?: { phase: string; processed: number; total: number };
@@ -172,10 +179,12 @@ function liveCandidates() {
           calculationBusy = false;
           calculationAt = Date.now();
           if (message.result) {
-            cached = message.result.filtered;
+            prepared = message.result.offers;
+            preparedReady = true;
             signature = message.result.key;
-            filterSignature = message.result.filterSignature;
+            filterSignature = "";
             scanFloor = message.result.scanFloor ?? scanFloor;
+            cached = filtered();
             calculationProgress = {
               ...calculationProgress,
               phase: "Обновлено",
@@ -230,9 +239,7 @@ function liveCandidates() {
       calculationWorker = undefined;
       void worker?.terminate();
     }, 120000).unref();
-    calculationWorker.postMessage({
-      kind: mustCalculate ? "calculate" : "filter",
-    });
+    calculationWorker.postMessage({ kind: "calculate" });
   }
   // Keep the last completed offers visible while the next snapshot is analyzed.
   return cached;
@@ -358,6 +365,7 @@ function candidates() {
     at,
     snapshotIds: snapshots.map((s) => s.id),
   });
+  preparedReady = true;
   scanFloor = settings.minProfit;
   filterSignature = "";
   calculationProgress = {

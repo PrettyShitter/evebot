@@ -262,6 +262,18 @@ a {
   font-size: 11px;
   margin-top: 6px;
 }
+.risk-text {
+  color: #f0b27d !important;
+}
+.risk-panel {
+  border: 1px solid #8c5c3d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #f0b27d;
+}
+.risk-panel p {
+  margin: 5px 0 0;
+}
 .data-row .numeric {
   text-align: right;
 }

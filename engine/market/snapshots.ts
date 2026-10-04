@@ -9,6 +9,7 @@ export async function syncRegion(
   region: string,
   clock: () => number = Date.now,
   allowedLocations?: ReadonlySet<string>,
+  excludedTypes?: ReadonlySet<string>,
 ) {
   const id = randomUUID(),
     start = new Date(clock()).toISOString();
@@ -29,6 +30,7 @@ export async function syncRegion(
         if (seen.has(order.order_id))
           throw Error("Дубли ордеров между страницами");
         seen.add(order.order_id);
+        if (excludedTypes?.has(order.type_id)) continue;
         orders.push(order);
       }
       expiry = Math.min(expiry, page.expires);

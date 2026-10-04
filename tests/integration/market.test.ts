@@ -11,7 +11,7 @@ import { D } from "../../engine/accounting/money";
 import type { HistoryDay } from "../../shared/contracts/esi";
 import { demoScan } from "../fixtures/demo-scan";
 
-it("stage 4: candidates reproducible, both scenarios, quantities, type cap, basket/reserve idempotency", () => {
+it("stage 4: candidates reproducible, scenario metrics, quantity, basket/reserve idempotency", () => {
   const s = new Store(":memory:", resolve("db/migrations"));
   try {
     seedDemo(s);
@@ -20,6 +20,11 @@ it("stage 4: candidates reproducible, both scenarios, quantities, type cap, bask
       second = demoScan(s);
     expect(first).toEqual(second);
     expect(first.length).toBeGreaterThan(0);
+    expect(
+      first.every(
+        (o) => Number(o.profitPerDay) >= 0 && o.seller.accounting >= 0,
+      ),
+    ).toBe(true);
     expect(
       first.every((o) => o.volume !== null && D(o.volume).lte(100000)),
     ).toBe(true);

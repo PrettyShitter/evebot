@@ -7,7 +7,7 @@ import { resolve, join } from "node:path";
 import { Store } from "../../db/store";
 import { seedDemo } from "../../engine/market/demo";
 import type { AppState } from "../../shared/contracts/app";
-it("live engine responds while a separate readonly calculator runs and recomputes filters", async () => {
+it("live engine filters ready offers instantly while recalculating structural changes in a worker", async () => {
   mkdirSync(".cache", { recursive: true });
   const dir = mkdtempSync(resolve(".cache/worker-test-"));
   const db = new Store(join(dir, "portfolio.sqlite"), resolve("db/migrations"));
@@ -70,8 +70,7 @@ it("live engine responds while a separate readonly calculator runs and recompute
         sort: state.settings.sort === "best" ? "buy" : "best",
       },
     });
-    expect(state.market.calculation.busy).toBe(true);
-    expect(state.market.calculation.phase).toBe("Применение фильтров");
+    expect(state.market.calculation.busy).toBe(false);
     expect(state.market.calculation.revision).toBe(beforeFilter);
     expect(state.opportunities.length).toBeGreaterThan(0);
     const shownOffer = state.opportunities[0];
@@ -92,7 +91,11 @@ it("live engine responds while a separate readonly calculator runs and recompute
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 20));
       state = await request({ kind: "state" });
-      if (!state.market.status.includes("Расчёт")) break;
+      if (
+        !state.market.status.includes("Расчёт") &&
+        state.market.calculation.revision > beforeFilter
+      )
+        break;
     }
     expect(state.opportunities).toHaveLength(0);
     expect(state.market.status).not.toContain("Расчёт");

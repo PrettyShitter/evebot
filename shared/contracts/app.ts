@@ -25,7 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   minTripProfit: "0",
   minROI: 0,
   roiEnabled: true,
-  maxTypeShare: 0.2,
+  maxTypeShare: 1,
   notificationThreshold: "10000000",
   sound: false,
   relistPerDay: 2,

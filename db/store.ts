@@ -63,6 +63,9 @@ export class Store {
     return {
       ...DEFAULT_SETTINGS,
       ...(row ? JSON.parse(row.value) : {}),
+      // Older installs saved a 20% per-item exposure cap. Remove it on read so
+      // expensive, high-conviction positions are not silently hidden.
+      maxTypeShare: 1,
       minTripProfit: "0",
       roiEnabled: true,
     };
@@ -70,6 +73,7 @@ export class Store {
   saveSettings(value: Settings) {
     const normalized = {
       ...value,
+      maxTypeShare: 1,
       minTripProfit: "0",
       roiEnabled: true,
     };
