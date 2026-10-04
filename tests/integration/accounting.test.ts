@@ -191,3 +191,79 @@ it("manually reconciles wallet operations completed before the deal was selected
     s.close();
   }
 });
+
+it("allocates only the remaining deal quantity from alt purchases and sells only from the main character", () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  try {
+    seedDemo(s);
+    s.saveSettings({ ...s.getSettings(), minTripProfit: "0" });
+    const data = readStatic(s)!;
+    const t = new Trades(s, () => data),
+      r = new Reconciler(s, () => data);
+    const opportunity = selectQuantity(
+      demoScan(s).find((o) => o.type.id === "587")!,
+      20,
+    );
+    s.sql.prepare("UPDATE characters SET status='syncing'").run();
+    t.accept("partial-alt-purchase", [opportunity]);
+    const at = new Date(Date.now() + 1000).toISOString();
+    const transaction = (
+      id: string,
+      quantity: number,
+      buy: boolean,
+      unitPrice = "100",
+    ) => ({
+      transaction_id: id,
+      date: at,
+      type_id: "587",
+      location_id: buy ? opportunity.source.id : opportunity.destination.id,
+      quantity,
+      unit_price: unitPrice,
+      is_buy: buy,
+      is_personal: true,
+      client_id: "999",
+      journal_ref_id: id + "0",
+    });
+    const insert = (characterId: string, tx: ReturnType<typeof transaction>) =>
+      s.sql
+        .prepare("INSERT INTO wallet_transactions VALUES (?,?,?,?,?)")
+        .run("esi", characterId, tx.transaction_id, JSON.stringify(tx), at);
+
+    // The second ESI transaction is larger than the selected deal's remainder.
+    insert("90000002", transaction("101", 10, true));
+    insert("90000003", transaction("102", 15, true, "110"));
+    r.run();
+    const deal = t.list()[0];
+    expect(deal.result.purchased).toBe(20);
+    expect(
+      s.sql
+        .prepare("SELECT quantity FROM purchase_lots ORDER BY transaction_id")
+        .all(),
+    ).toEqual([{ quantity: 10 }, { quantity: 10 }]);
+    const partial = deal.events.find(
+      (event) =>
+        event.kind === "purchase.matched" &&
+        (JSON.parse(event.payload) as { transactionId?: string })
+          .transactionId === "102",
+    );
+    expect(JSON.parse(partial!.payload)).toMatchObject({
+      quantity: 10,
+      transactionQuantity: 15,
+      unassignedQuantity: 5,
+    });
+
+    for (const lot of r.review().transfers) r.confirmTransfer(lot.id);
+    insert("90000002", transaction("103", 20, false, "150"));
+    insert("90000001", transaction("104", 20, false, "150"));
+    r.run();
+    expect(t.list()[0].result.sold).toBe(20);
+    expect(t.list()[0].result.cost).toBe("2100.00");
+    expect([
+      ...new Set(
+        t.list()[0].saleTransactions.map((sale) => sale.transactionId),
+      ),
+    ]).toEqual(["104"]);
+  } finally {
+    s.close();
+  }
+});

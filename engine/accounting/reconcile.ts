@@ -136,12 +136,16 @@ export class Reconciler {
     const acquired = (
       this.store.sql
         .prepare(
-          "SELECT coalesce(sum(quantity),0) n FROM purchase_lots WHERE deal_id=? AND type_id=?",
+          "SELECT coalesce(sum(quantity),0) n FROM purchase_lots WHERE deal_id=? AND type_id=? AND location_id=?",
         )
-        .get(dealId, tx.type_id) as { n: number }
+        .get(dealId, tx.type_id, tx.location_id) as { n: number }
     ).n;
-    if (acquired + tx.quantity > line.quantity)
-      throw Error("Покупка превышает остаток выбранной партии");
+    const allocated = Math.min(
+      tx.quantity,
+      Math.max(0, line.quantity - acquired),
+    );
+    if (allocated === 0)
+      throw Error("В выбранной сделке больше нет места для покупки");
     this.store.sql
       .prepare("INSERT INTO purchase_lots VALUES (?,?,?,?,?,?,?,?,?,?,?)")
       .run(
@@ -151,8 +155,8 @@ export class Reconciler {
         characterId,
         tx.transaction_id,
         tx.date,
-        tx.quantity,
-        tx.quantity,
+        allocated,
+        allocated,
         tx.unit_price,
         tx.location_id,
         characterId === sellerId ? "confirmed" : "review",
@@ -160,7 +164,9 @@ export class Reconciler {
     this.trades.event(dealId, "purchase.matched", {
       characterId,
       transactionId: tx.transaction_id,
-      quantity: tx.quantity,
+      quantity: allocated,
+      transactionQuantity: tx.quantity,
+      unassignedQuantity: tx.quantity - allocated,
     });
   }
   private releasePaidReservations() {
@@ -370,11 +376,11 @@ export class Reconciler {
           const acquired = (
             this.store.sql
               .prepare(
-                "SELECT coalesce(sum(quantity),0) n FROM purchase_lots WHERE deal_id=? AND type_id=?",
+                "SELECT coalesce(sum(quantity),0) n FROM purchase_lots WHERE deal_id=? AND type_id=? AND location_id=?",
               )
-              .get(d.id, r.tx.type_id) as { n: number }
+              .get(d.id, r.tx.type_id, r.tx.location_id) as { n: number }
           ).n;
-          return acquired + r.tx.quantity <= line.quantity;
+          return acquired < line.quantity;
         });
         if (matches.length === 1) {
           this.bindPurchase(
