@@ -371,7 +371,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                     </div>
                     <div className="caption">
                       {contract.manufacturingEligibility === "candidate"
-                        ? "Одна копия с известными атрибутами и рецептом; итоговый расчёт появится при свежем рынке и подтверждённой площадке."
+                        ? "Копии с известными атрибутами и рецептом; цена контракта оплачивается целиком, а стоимость распределяется по прогонам."
                         : contract.manufacturingEligibility === "mixed_contract"
                           ? "Не участвует в расчёте: цена включает другие предметы, их стоимость/ценность отдельно не оценена."
                           : contract.manufacturingEligibility === "multiple_copies"
@@ -402,12 +402,12 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="font-medium">Производство с покупкой BPC-контракта</h2>
-                <p className="caption mt-1">Учитывается полная цена одиночного контракта, материалы и комиссия. Покупку нужно выполнить вручную; после синхронизации принадлежащий BPC появится среди обычных предложений.</p>
+                <p className="caption mt-1">Для набора требуется вся сумма контракта. Себестоимость выбранной партии получает долю цены BPC по прогонам, оставшиеся копии и их стоимость сохраняются. Покупку нужно выполнить вручную; после синхронизации принадлежащие BPC появятся среди обычных предложений.</p>
               </div>
               <span className="badge">{visibleContractOffers.length} из {production.contractOffers.length}</span>
             </div>
             {!visibleContractOffers.length ? (
-              <p className="caption rounded border border-border p-3">Нет контрактов, которые одновременно содержат одну копию с известными ME/TE/runs, совпадают с рецептом SDE и доступны на подтверждённой производственной станции.</p>
+              <p className="caption rounded border border-border p-3">Нет контрактов с известными ME/TE/runs, подходящим рецептом SDE и подтверждённой производственной станцией.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[880px] text-sm">
@@ -420,6 +420,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                       <td className="p-2"><CopyName name={offer.itemName} onCopy={copyName} />
                         <div className="caption mt-1">{offer.contractTitle} · {offer.pickupLocation} · контракт проверен {timestamp(offer.contractObservedAt)} · рынок {timestamp(offer.observedAt)} · до {timestamp(offer.expiresAt)}</div>
                         <div className="caption">Контракт #{offer.contractId} · {offer.blueprintTypeName} · {offer.facilityName} · {offer.includedItemCount} позиций</div>
+                        <div className="caption">Копий этого чертежа в наборе: {offer.blueprintCopies} · суммарно {offer.bundleRuns} прогонов</div>
                         {!offer.blueprintOnly && <div className="caption text-amber-300">Смешанный контракт: в затраты включена вся сумма {isk(offer.contractPrice)}; остальные предметы не оцениваются и не добавляют прибыль.</div>}
                         <MarketSignalView signal={offer.marketSignal} />
                         {offer.estimate.warnings.map((warning) => <div key={warning} className="caption text-amber-300">{warning}</div>)}
@@ -436,7 +437,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                         </details>
                       </td>
                       <td className="p-2 text-right tabular-nums">{offer.runs} прогонов<div className="caption">{offer.estimate.outputQuantity.toLocaleString("ru-RU")} шт.</div></td>
-                      <td className="p-2 text-right tabular-nums">{isk(offer.estimate.totalCost)}<div className="caption">{offer.blueprintOnly ? "BPC" : "Весь контракт"} {isk(offer.contractPrice)} · сырьё {isk(offer.estimate.materialsCost)}</div><div className="caption">К оплате для запуска: {isk(offer.estimate.cashRequired)}</div></td>
+                      <td className="p-2 text-right tabular-nums">{isk(offer.estimate.totalCost)}<div className="caption">Контракт целиком {isk(offer.contractPrice)} · в партии учтено BPC {isk(offer.estimate.blueprintAcquisitionCost ?? "0")} · сырьё {isk(offer.estimate.materialsCost)}</div><div className="caption">Остаётся после партии: {Math.max(0, offer.bundleRuns - offer.estimate.runs)} прогонов копий</div><div className="caption">К оплате для запуска: {isk(offer.estimate.cashRequired)}</div></td>
                       <td className="p-2 text-right tabular-nums"><strong>{isk(offer.estimate.firstCycleProfit.immediate)}</strong><div className="caption">ROI первого цикла {offer.estimate.firstCycleRoi.immediate === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.immediate) * 100).toFixed(1)}%`}</div><div className="caption">Операционная прибыль партии: {isk(offer.estimate.immediate.netProfit)}</div></td>
                       <td className="p-2 text-right tabular-nums"><strong>{isk(offer.estimate.firstCycleProfit.sellOrder)}</strong><div className="caption">цена {isk(offer.estimate.sellOrder.unitPrice)} / шт.</div><div className="caption">ROI первого цикла {offer.estimate.firstCycleRoi.sellOrder === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.sellOrder) * 100).toFixed(1)}%`}</div><div className="caption">Операционная прибыль партии: {isk(offer.estimate.sellOrder.netProfit)}</div></td>
                     </tr>

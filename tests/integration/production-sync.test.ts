@@ -193,8 +193,21 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       blueprintOnly: false,
       includedItemCount: 2,
       items: [{ recordId: "88006", typeId: "683", quantity: 1, isBlueprintCopy: true, materialEfficiency: 0, timeEfficiency: 0, runs: 2 }],
+    }, {
+      contractId: "88006",
+      regionId: "10000002",
+      locationId: "60003760",
+      price: "30000",
+      expiresAt: "2027-10-08T00:00:00Z",
+      title: "Three-copy BPC bundle",
+      blueprintOnly: true,
+      includedItemCount: 3,
+      items: ["88007", "88008", "88009"].map((recordId) => ({
+        recordId, typeId: "683", quantity: 1, isBlueprintCopy: true,
+        materialEfficiency: 0, timeEfficiency: 0, runs: 2,
+      })),
     }],
-    contractCoverage: { candidateContracts: 3, fetchedContracts: 3, capped: false, complete: true, itemErrors: 0 },
+    contractCoverage: { candidateContracts: 4, fetchedContracts: 4, capped: false, complete: true, itemErrors: 0 },
   };
   const acquiredContractRemovedFromPublic: PublicProductionData = {
     ...publicData,
@@ -247,7 +260,8 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
         includedItemCount: 1, manufacturingEligibility: "unknown_attributes",
         blueprints: [expect.objectContaining({ typeId: "683", attributesKnown: false })],
       }), expect.objectContaining({ contractId: "88003", manufacturingEligibility: "candidate" }),
-      expect.objectContaining({ contractId: "88005", blueprintOnly: false, includedItemCount: 2, manufacturingEligibility: "candidate" })]),
+      expect.objectContaining({ contractId: "88005", blueprintOnly: false, includedItemCount: 2, manufacturingEligibility: "candidate" }),
+      expect.objectContaining({ contractId: "88006", blueprintOnly: true, includedItemCount: 3, manufacturingEligibility: "candidate", blueprints: [expect.objectContaining({ quantity: 3, attributesKnown: true })] })]),
     });
     const accessLost = await request({
       kind: "production-data", characterId: "9001", profile, own, publicData: acquiredContractRemovedFromPublic,
@@ -277,7 +291,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       source_kind: "owned", source_id: "9101", runs: -1, status: "available",
     });
     expect(sourceDb.sql.prepare("SELECT contract_id,price,acquisition_runs FROM blueprint_sources WHERE source_id='9102'").get()).toEqual({
-      contract_id: "88003", price: "1000", acquisition_runs: 2,
+      contract_id: "88003", price: "1000.00", acquisition_runs: 2,
     });
     sourceDb.close();
 
@@ -295,7 +309,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
     expect(completedContractRemovedFromPublicListings.error).toBeUndefined();
     const retainedAcquisition = new Store(dbPath, resolve("db/migrations"));
     expect(retainedAcquisition.sql.prepare("SELECT contract_id,price,acquisition_runs FROM blueprint_sources WHERE source_id='9102'").get()).toEqual({
-      contract_id: "88003", price: "1000", acquisition_runs: 2,
+      contract_id: "88003", price: "1000.00", acquisition_runs: 2,
     });
     retainedAcquisition.close();
 
@@ -333,7 +347,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       evidence: "Fixture-only confirmed manufacturing profile",
     });
     expect(confirmedNpc.error).toBeUndefined();
-    expect(confirmedNpc.value?.production.contractOffers).toHaveLength(2);
+    expect(confirmedNpc.value?.production.contractOffers).toHaveLength(3);
     expect(confirmedNpc.value?.production.contractOffers[0]).toMatchObject({
       contractId: "88003",
       runs: 1,
@@ -363,6 +377,17 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
         estimate: expect.objectContaining({
           blueprintPurchaseCashCost: "2000.00",
           cashRequired: expect.any(String),
+        }),
+      }),
+      expect.objectContaining({
+        contractId: "88006",
+        contractPrice: "30000",
+        blueprintCopies: 3,
+        bundleRuns: 6,
+        runs: 1,
+        estimate: expect.objectContaining({
+          blueprintAcquisitionCost: "5000.00",
+          blueprintPurchaseCashCost: "30000.00",
         }),
       }),
     ]));

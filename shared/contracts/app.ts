@@ -384,6 +384,8 @@ export interface AppState {
       itemName: string;
       itemEnglishName: string;
       blueprintTypeName: string;
+      blueprintCopies: number;
+      bundleRuns: number;
       facilityName: string;
       systemId: string;
       runs: number;

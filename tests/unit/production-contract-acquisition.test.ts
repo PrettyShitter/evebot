@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  allocateBpcBundleCost,
   allocateBlueprintAcquisitionCost,
+  groupKnownBpcCopies,
+  knownBpcCopies,
   matchCompletedBlueprintContractAcquisitions,
   singleKnownBpc,
 } from "../../engine/production/contract-acquisition";
@@ -39,6 +42,48 @@ describe("completed public blueprint contract acquisition matching", () => {
     expect(singleKnownBpc({ ...mixed, items: [mixed.items[0]!, { ...mixed.items[0]!, typeId: "684" }] })).toBeNull();
   });
 
+  it("quotes a three-copy contract at full cash price and preserves unconsumed run value", () => {
+    const bundle = {
+      ...listing,
+      price: "30000000.00",
+      items: Array.from({ length: 3 }, (_, index) => ({
+        ...listing.items[0]!,
+        recordId: String(7100 + index),
+        itemId: String(8100 + index),
+        runs: 20,
+      })),
+    };
+    const grouped = groupKnownBpcCopies(bundle);
+    expect(knownBpcCopies(bundle)).toHaveLength(3);
+    expect(grouped).toMatchObject({
+      bundleRuns: 60,
+      groups: [{ copies: 3, runs: 60 }],
+    });
+    expect(allocateBpcBundleCost(bundle.price, 60, 20)).toBe("10000000.00");
+    expect(allocateBpcBundleCost(bundle.price, 60, 60)).toBe("30000000.00");
+    const owned = bundle.items.map((item, index) => ({
+      itemId: `owned-${index}`,
+      typeId: item.typeId,
+      locationId: bundle.locationId,
+      quantity: 1,
+      materialEfficiency: item.materialEfficiency!,
+      timeEfficiency: item.timeEfficiency!,
+      runs: item.runs!,
+    }));
+    bundle.items.forEach((item, index) => { item.itemId = `owned-${index}`; });
+    const matched = matchCompletedBlueprintContractAcquisitions(
+      "9001",
+      [{ ...contract, price: bundle.price }],
+      [bundle],
+      owned,
+    );
+    expect(matched).toHaveLength(3);
+    expect(matched.reduce((total, item) => total + Number(item.price), 0)).toBe(30_000_000);
+    expect(matched.map((item) => item.price)).toEqual([
+      "10000000.00", "10000000.00", "10000000.00",
+    ]);
+  });
+
   it("does not match unaccepted, unfinished, mismatched or ambiguous records", () => {
     expect(matchCompletedBlueprintContractAcquisitions("9001", [{ ...contract, status: "in_progress" }], [listing], [blueprint])).toEqual([]);
     expect(matchCompletedBlueprintContractAcquisitions("9001", [{ ...contract, acceptorId: "9002" }], [listing], [blueprint])).toEqual([]);
@@ -74,5 +119,7 @@ describe("BPC purchase cost per allocated run", () => {
     expect(allocateBlueprintAcquisitionCost("1200000.00", null, 10)).toBeNull();
     expect(allocateBlueprintAcquisitionCost("1200000.00", 40, 41)).toBeNull();
     expect(allocateBlueprintAcquisitionCost("9007199254740993.00", 2, 1)).toBe("4503599627370496.50");
+    expect(allocateBpcBundleCost("30000000", 60, 61)).toBeNull();
+    expect(allocateBpcBundleCost("unknown", 60, 20)).toBeNull();
   });
 });

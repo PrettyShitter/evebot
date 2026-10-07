@@ -27,7 +27,7 @@ import { listingFee } from "./market/fees";
 import { pnl } from "./market/depth";
 import { estimateReprocessing } from "./production/reprocessing";
 import { availableBlueprintRuns, canReserveBlueprintRuns } from "./production/blueprints";
-import { allocateBlueprintAcquisitionCost, matchCompletedBlueprintContractAcquisitions, singleKnownBpc } from "./production/contract-acquisition";
+import { allocateBpcBundleCost, allocateBlueprintAcquisitionCost, groupKnownBpcCopies, knownBpcCopies, matchCompletedBlueprintContractAcquisitions } from "./production/contract-acquisition";
 import { Graph } from "./routes/graph";
 import { seedDemo, DEMO_TIME } from "./market/demo";
 import { Trades, selectQuantity } from "./portfolio/trades";
@@ -616,15 +616,22 @@ function manufacturingOffers(
       title?: string; blueprintOnly?: boolean; includedItemCount?: number; items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
     };
     const items = payload.items ?? [];
-    const item = singleKnownBpc({
+    const bundle = groupKnownBpcCopies({
       contractId: contract.contract_id,
       locationId: contract.location_id ?? "",
       price: contract.price,
       blueprintOnly: payload.blueprintOnly === true,
       items,
     });
-    if (!item) return [];
-    return [{ contract, title: payload.title ?? "Публичный контракт", item }];
+    if (!bundle) return [];
+    return bundle.groups.map((group) => ({
+      contract,
+      title: payload.title ?? "Публичный контракт",
+      item: group.item,
+      copies: group.copies,
+      groupRuns: group.runs,
+      bundleRuns: bundle.bundleRuns,
+    }));
   });
   if (!blueprints.length && !contractBlueprints.length) return empty;
   if (blueprints.some((blueprint) => Date.now() - Date.parse(blueprint.observed_at) > 7 * 24 * 60 * 60 * 1000)) return empty;
@@ -684,7 +691,7 @@ function manufacturingOffers(
     ).all() as { location_id: string; output_type_id: string; system_cost_multiplier: string; material_bonus_percent: number; time_bonus_percent: number; broker_fee_rate: string; observed_at: string }[])
       .map((modifier) => [modifier.location_id, modifier.output_type_id, modifier.system_cost_multiplier, modifier.material_bonus_percent, modifier.time_bonus_percent, modifier.broker_fee_rate, modifier.observed_at]),
     blueprints.map((blueprint) => [blueprint.item_id, blueprint.observed_at, blueprint.acquisition_cost, blueprint.acquisition_runs]),
-    contractBlueprints.map(({ contract, item }) => [contract.contract_id, contract.observed_at, contract.price, contract.location_id, item.recordId, item.typeId, item.materialEfficiency, item.timeEfficiency, item.runs]),
+    contractBlueprints.map(({ contract, item, copies, groupRuns, bundleRuns }) => [contract.contract_id, contract.observed_at, contract.price, contract.location_id, item.recordId, item.typeId, item.materialEfficiency, item.timeEfficiency, item.runs, copies, groupRuns, bundleRuns]),
     activeBlueprintAllocations.map((allocation) => [allocation.blueprint_source_id, allocation.runs, allocation.allocations]),
     projectOutputLots.map((lot) => [lot.id, lot.available, lot.unit_cost, lot.location_id]),
     profileRow.race,
@@ -1232,7 +1239,7 @@ function manufacturingOffers(
         remainingRuns: item.runs!,
         locationId: contract.location_id!,
       },
-      blueprintAcquisitionCost: allocateBlueprintAcquisitionCost(contract.price, item.runs, runs),
+      blueprintAcquisitionCost: allocateBpcBundleCost(contract.price, candidate.bundleRuns, runs),
       blueprintPurchaseCashCost: contract.price,
       facility: {
         id: station.id,
@@ -1307,7 +1314,7 @@ function manufacturingOffers(
       if (score.gt(bestProfit)) { best = estimate; bestProfit = score; }
     }
     if (!best) continue;
-    const allocatedBlueprintCost = allocateBlueprintAcquisitionCost(contract.price, item.runs, best.runs);
+    const allocatedBlueprintCost = allocateBpcBundleCost(contract.price, candidate.bundleRuns, best.runs);
     const chain = estimateWithChain(best, recipe, station, item.recordId, allocatedBlueprintCost, false, contract.price);
     const finalEstimate = chain.estimate;
     const outputName = nameOf(output.typeId);
@@ -1326,6 +1333,8 @@ function manufacturingOffers(
       itemName: outputName,
       itemEnglishName: typeById.get(output.typeId)?.englishName ?? outputName,
       blueprintTypeName: nameOf(item.typeId),
+      blueprintCopies: candidate.copies,
+      bundleRuns: candidate.bundleRuns,
       facilityName: profileAtStation.row.name,
       systemId: station.systemId,
       runs: finalEstimate.runs,
@@ -1724,14 +1733,20 @@ function productionSummary(): AppState["production"] {
         attributesKnown: item.isBlueprintCopy === true && item.materialEfficiency !== null && item.timeEfficiency !== null && item.runs !== null && item.runs > 0,
       }));
       const blueprintOnly = payload.blueprintOnly === true;
-      const single = blueprints.length === 1 ? blueprints[0] : undefined;
-      const manufacturingEligibility: AppState["production"]["blueprintContracts"][number]["manufacturingEligibility"] = !single || single.quantity !== 1
-        ? !blueprintOnly ? "mixed_contract" : "multiple_copies"
-        : !single.attributesKnown
-          ? "unknown_attributes"
-          : (productionStatic.manufacturing ?? []).some((recipe) => recipe.blueprintTypeId === single.typeId)
-            ? "candidate"
-            : "unknown_recipe";
+      const knownCopies = knownBpcCopies({
+        contractId: contract.contract_id,
+        locationId: contract.location_id ?? "",
+        price: contract.price,
+        blueprintOnly,
+        items,
+      });
+      const manufacturingEligibility: AppState["production"]["blueprintContracts"][number]["manufacturingEligibility"] = !knownCopies
+        ? "unknown_attributes"
+        : knownCopies.some((item) =>
+            (productionStatic.manufacturing ?? []).some((recipe) => recipe.blueprintTypeId === item.typeId),
+          )
+          ? "candidate"
+          : "unknown_recipe";
       return {
         contractId: contract.contract_id,
         title: payload.title ?? "Публичный контракт",
