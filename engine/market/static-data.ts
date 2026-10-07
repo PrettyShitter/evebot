@@ -18,6 +18,27 @@ export interface ItemType {
   groupId: string;
   marketGroupId: string;
   volume: string | null;
+  portionSize?: number;
+}
+export interface ProductionMaterial {
+  typeId: string;
+  quantity: number;
+}
+export interface ProductionSkillRequirement {
+  typeId: string;
+  level: number;
+}
+export interface ManufacturingBlueprint {
+  blueprintTypeId: string;
+  maxProductionLimit: number;
+  materials: ProductionMaterial[];
+  products: ProductionMaterial[];
+  skills: ProductionSkillRequirement[];
+  baseTimeSeconds: number | null;
+}
+export interface ReprocessingRecipe {
+  typeId: string;
+  materials: ProductionMaterial[];
 }
 export interface StaticData {
   version: string;
@@ -28,6 +49,9 @@ export interface StaticData {
   zone: string[];
   regions: string[];
   marketGroups: { id: string; name: string; parentId: string | null }[];
+  manufacturing?: ManufacturingBlueprint[];
+  reprocessing?: ReprocessingRecipe[];
+  alphaSkillCaps?: Record<string, Record<string, number>>;
 }
 // Recompute the configured search universe for persisted data from older releases.
 // Retain the full graph and NPC-origin index for routes and ranged buy orders.
@@ -67,6 +91,21 @@ const typeSchema = z.object({
   packagedVolume: z.number().optional(),
   volume: z.number().optional(),
   published: z.boolean(),
+  portionSize: z.number().int().positive().optional(),
+});
+const materialSchema = z.object({
+  typeID: z.number().int().positive(),
+  quantity: z.number().int().positive(),
+});
+const skillRequirementSchema = z.object({
+  typeID: z.number().int().positive(),
+  level: z.number().int().min(0).max(5),
+});
+const manufacturingActivitySchema = z.object({
+  materials: z.array(materialSchema).default([]),
+  products: z.array(materialSchema).default([]),
+  skills: z.array(skillRequirementSchema).optional().default([]),
+  time: z.number().int().nonnegative(),
 });
 export function extractSde(zip: Uint8Array): StaticData {
   const needed = new Set([
@@ -78,6 +117,10 @@ export function extractSde(zip: Uint8Array): StaticData {
     "groups.jsonl",
     "npcCorporations.jsonl",
     "marketGroups.jsonl",
+    "blueprints.jsonl",
+    "typeMaterials.jsonl",
+    "cloneGrades.jsonl",
+    "industryActivities.jsonl",
   ]);
   const files = unzipSync(zip, { filter: (f) => needed.has(f.name) });
   const records = (name: string): unknown[] => {
@@ -157,6 +200,7 @@ export function extractSde(zip: Uint8Array): StaticData {
         },
         shipGroups.has(t.groupID),
       ),
+      portionSize: t.portionSize,
     }));
   const marketGroups = records("marketGroups.jsonl").map((row) => {
     const g = z
@@ -172,6 +216,72 @@ export function extractSde(zip: Uint8Array): StaticData {
       parentId: g.parentGroupID ? String(g.parentGroupID) : null,
     };
   });
+  const manufacturing = records("blueprints.jsonl").flatMap((row) => {
+    const value = z
+      .object({
+        blueprintTypeID: z.number().int().positive(),
+        maxProductionLimit: z.number().int().positive(),
+        activities: z.object({
+          manufacturing: manufacturingActivitySchema.optional(),
+        }),
+      })
+      .parse(row);
+    const activity = value.activities.manufacturing;
+    if (!activity || !activity.products.length) return [];
+    return [
+      {
+        blueprintTypeId: String(value.blueprintTypeID),
+        maxProductionLimit: value.maxProductionLimit,
+        materials: activity.materials.map((m) => ({
+          typeId: String(m.typeID),
+          quantity: m.quantity,
+        })),
+        products: activity.products.map((m) => ({
+          typeId: String(m.typeID),
+          quantity: m.quantity,
+        })),
+        skills: activity.skills.map((s) => ({
+          typeId: String(s.typeID),
+          level: s.level,
+        })),
+        baseTimeSeconds: activity.time > 0 ? activity.time : null,
+      },
+    ];
+  });
+  const reprocessing = records("typeMaterials.jsonl").map((row) => {
+    const value = z
+      .object({
+        _key: z.number().int().positive(),
+        materials: z.array(
+          z.object({
+            materialTypeID: z.number().int().positive(),
+            quantity: z.number().int().positive(),
+          }),
+        ).default([]),
+      })
+      .parse(row);
+    return {
+      typeId: String(value._key),
+      materials: value.materials.map((m) => ({
+        typeId: String(m.materialTypeID),
+        quantity: m.quantity,
+      })),
+    };
+  });
+  const alphaSkillCaps: Record<string, Record<string, number>> = {};
+  for (const row of records("cloneGrades.jsonl")) {
+    const value = z
+      .object({
+        name: z.string(),
+        skills: z.array(skillRequirementSchema),
+      })
+      .parse(row);
+    if (!value.name.startsWith("Alpha ")) continue;
+    const race = value.name.slice("Alpha ".length);
+    alphaSkillCaps[race] = Object.fromEntries(
+      value.skills.map((s) => [String(s.typeID), s.level]),
+    );
+  }
   return {
     version: String(meta.buildNumber),
     npcStationIds: records("npcStations.jsonl").map((r) =>
@@ -183,6 +293,9 @@ export function extractSde(zip: Uint8Array): StaticData {
     zone: [...zone],
     regions: [...new Set(stations.map((s) => s.regionId))],
     marketGroups,
+    manufacturing,
+    reprocessing,
+    alphaSkillCaps,
   };
 }
 export async function downloadSde(): Promise<StaticData> {

@@ -1,8 +1,68 @@
 {
-  "at": "2026-10-03T09:06:34.743Z",
-  "uiFilterMs": 75,
-  "filterMs": 12.400000005960464,
-  "maxRendererGapMs": 19.799999997019768,
-  "offersBefore": 24,
+  "at": "2026-10-07T23:37:49.571Z",
+  "uiFilterMs": 75.90000003576279,
+  "stateTimings": [
+    {
+      "productionMs": 1829.6564170000001,
+      "opportunitiesMs": 3897.4995830000003,
+      "detailMs": 3.1127919999998994,
+      "totalMs": 5732.260209,
+      "offerCount": 8,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.024042000000008557,
+      "opportunitiesMs": 0.934291999999914,
+      "detailMs": 2.8649160000004485,
+      "totalMs": 4.057083000000603,
+      "offerCount": 8,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.026332999999794993,
+      "opportunitiesMs": 1.4428340000004027,
+      "detailMs": 1.9497499999997672,
+      "totalMs": 3.6753340000004755,
+      "offerCount": 3,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.017458000000260654,
+      "opportunitiesMs": 0.34916700000030687,
+      "detailMs": 1.7081250000001091,
+      "totalMs": 2.2640840000003664,
+      "offerCount": 3,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.03212500000063301,
+      "opportunitiesMs": 0.6682080000000497,
+      "detailMs": 1.7393750000001091,
+      "totalMs": 2.962333999999828,
+      "offerCount": 3,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.0184159999998883,
+      "opportunitiesMs": 0.4332089999998061,
+      "detailMs": 1.6734580000002097,
+      "totalMs": 2.266958000000159,
+      "offerCount": 0,
+      "productionOfferCount": 0
+    },
+    {
+      "productionMs": 0.0165419999993901,
+      "opportunitiesMs": 3784.475125000001,
+      "detailMs": 2.6423329999997804,
+      "totalMs": 3787.241708999999,
+      "offerCount": 0,
+      "productionOfferCount": 0
+    }
+  ],
+  "filterMs": 17.80000001192093,
+  "stateMs": 19.19999998807907,
+  "stateJsonBytes": 435689,
+  "maxRendererGapMs": 25,
+  "offersBefore": 3,
   "offersAfter": 0
 }

@@ -1,16 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { z } from "zod";
+import {
+  PRODUCTION_SCOPES,
+  OPTIONAL_STRUCTURE_SCOPES,
+} from "../../shared/contracts/app";
 export const CALLBACK = "http://localhost:43827/callback";
 export const SCOPES = {
   buyer: ["esi-wallet.read_character_wallet.v1"],
-  seller: [
-    "esi-wallet.read_character_wallet.v1",
-    "esi-skills.read_skills.v1",
-    "esi-skills.read_skillqueue.v1",
-    "esi-characters.read_standings.v1",
-    "esi-markets.read_character_orders.v1",
-  ],
+  seller: [...new Set([...PRODUCTION_SCOPES, ...OPTIONAL_STRUCTURE_SCOPES])],
 };
 export function pkce() {
   const verifier = randomBytes(32).toString("base64url");

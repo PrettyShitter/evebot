@@ -27,6 +27,7 @@ const standingsSchema = z.array(
   }),
 );
 export interface ProfileData {
+  race: string | null;
   skills: z.infer<typeof skillsSchema>["skills"];
   standings: z.infer<typeof standingsSchema>;
   queue: z.infer<typeof queueSchema>;
@@ -37,6 +38,11 @@ export async function fetchProfile(
   id: string,
   token: string,
 ): Promise<ProfileData> {
+  const character = z
+    .object({ race: z.string() })
+    .parse(
+      (await client.get(`/characters/${id}`, undefined, id)).body,
+    );
   const skills = skillsSchema.parse(
     (await client.get(`/characters/${id}/skills`, token, id)).body,
   ).skills;
@@ -46,7 +52,13 @@ export async function fetchProfile(
   const queue = queueSchema.parse(
     (await client.get(`/characters/${id}/skillqueue`, token, id)).body,
   );
-  return { skills, standings, queue, at: new Date().toISOString() };
+  return {
+    race: character.race,
+    skills,
+    standings,
+    queue,
+    at: new Date().toISOString(),
+  };
 }
 export function stationProfile(
   data: ProfileData,

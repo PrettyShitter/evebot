@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import { settings } from "./schema";
 import type { Settings } from "../shared/contracts/app";
 import { DEFAULT_SETTINGS } from "../shared/contracts/app";
+const CURRENT_SCHEMA_VERSION = 11;
 export class Store {
   readonly sql: Database.Database;
   readonly orm;
@@ -29,17 +30,17 @@ export class Store {
     this.orm = drizzle(this.sql);
     const version = Number(this.sql.pragma("user_version", { simple: true }));
     if (options.readonly) {
-      if (version !== 2)
+      if (version !== CURRENT_SCHEMA_VERSION)
         throw Error("Database migration required before calculation");
       return;
     }
     try {
-      if (version > 2) throw Error("Версия базы новее приложения");
-      if (version > 0 && version < 2 && path !== ":memory:")
+      if (version > CURRENT_SCHEMA_VERSION) throw Error("Версия базы новее приложения");
+      if (version > 0 && version < CURRENT_SCHEMA_VERSION && path !== ":memory:")
         this.sql
           .prepare("VACUUM INTO ?")
           .run(path + ".before-migration-" + version + "-" + Date.now());
-      for (let next = version + 1; next <= 2; next++)
+      for (let next = version + 1; next <= CURRENT_SCHEMA_VERSION; next++)
         this.sql.transaction(() => {
           this.sql.exec(
             readFileSync(
@@ -133,7 +134,7 @@ export function restoreBackup(source: string, destination: string) {
     if (
       db.pragma("integrity_check", { simple: true }) !== "ok" ||
       (db.pragma("foreign_key_check") as unknown[]).length ||
-      ![1, 2].includes(Number(db.pragma("user_version", { simple: true })))
+      !Array.from({ length: CURRENT_SCHEMA_VERSION }, (_, i) => i + 1).includes(Number(db.pragma("user_version", { simple: true })))
     )
       throw Error("Некорректная резервная копия");
     db.pragma("wal_checkpoint(TRUNCATE)");

@@ -6,6 +6,8 @@ import {
 } from "../../engine/market/static-data";
 import { excludedMarketTypeIds } from "../../engine/market/classification";
 import { Graph, CENTERS } from "../../engine/routes/graph";
+import { extractSde } from "../../engine/market/static-data";
+import { zipSync, strToU8 } from "fflate";
 it("official bundled SDE resolves exact centers and only their NPC stations", () => {
   const source = JSON.parse(
     readFileSync("resources/static-data.json", "utf8"),
@@ -31,6 +33,21 @@ it("official bundled SDE resolves exact centers and only their NPC stations", ()
   );
   expect(data.types.find((t) => t.id === "587")?.volume).toBe("2500");
   expect(data.types.some((t) => t.id === "44992")).toBe(false);
+  expect(data.manufacturing?.length).toBeGreaterThan(4500);
+  expect(data.reprocessing?.length).toBeGreaterThan(9000);
+  expect(data.alphaSkillCaps?.Amarr["3380"]).toBe(5);
+  expect(
+    data.manufacturing?.find((recipe) => recipe.blueprintTypeId === "683"),
+  ).toMatchObject({
+    products: [{ typeId: "582", quantity: 1 }],
+    baseTimeSeconds: 6000,
+  });
+  expect(
+    data.reprocessing?.find((recipe) => recipe.typeId === "18")?.materials,
+  ).toEqual([
+    { typeId: "34", quantity: 175 },
+    { typeId: "36", quantity: 70 },
+  ]);
 });
 
 it("classifies SDE minerals, ordinary and compressed ore for early exclusion", () => {
@@ -44,6 +61,100 @@ it("classifies SDE minerals, ordinary and compressed ore for early exclusion", (
   expect(excluded.has("62516")).toBe(true); // Compressed Veldspar
   expect(excluded.has("16262")).toBe(false); // Clear Icicle
   expect(excluded.has("16272")).toBe(false); // Heavy Water
+});
+
+it("extracts manufacturing recipes, Alpha caps and reprocessing materials without reactions", () => {
+  const jsonl = (rows: unknown[]) =>
+    strToU8(rows.map((row) => JSON.stringify(row)).join("\n"));
+  const archive = zipSync({
+    "_sde.jsonl": jsonl([{ _key: "sde", buildNumber: 3586130 }]),
+    "mapSolarSystems.jsonl": jsonl([
+      { _key: 30000142, name: { en: "Jita" }, regionID: 10000002, securityStatus: 0.9 },
+    ]),
+    "mapStargates.jsonl": jsonl([]),
+    "npcStations.jsonl": jsonl([
+      { _key: 60003760, solarSystemID: 30000142, ownerID: 1000035 },
+    ]),
+    "types.jsonl": jsonl([
+      { _key: 123456789, name: { en: "Large ID" }, groupID: 25, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 3 },
+    ]),
+    "groups.jsonl": jsonl([{ _key: 25, categoryID: 6 }]),
+    "npcCorporations.jsonl": jsonl([]),
+    "marketGroups.jsonl": jsonl([
+      { _key: 64, name: { en: "Ships" } },
+    ]),
+    "industryActivities.jsonl": jsonl([{ _key: 1, name: "Manufacturing" }]),
+    "blueprints.jsonl": jsonl([
+      {
+        _key: 987654321,
+        blueprintTypeID: 987654321,
+        maxProductionLimit: 30,
+        activities: {
+          manufacturing: {
+            materials: [{ typeID: 123456789, quantity: 24000 }],
+            products: [{ typeID: 123456788, quantity: 1 }],
+            skills: [{ typeID: 3380, level: 1 }],
+            time: 6000,
+          },
+          reaction: {
+            materials: [{ typeID: 555, quantity: 5 }],
+            products: [{ typeID: 556, quantity: 1 }],
+            time: 10800,
+          },
+        },
+      },
+      {
+        _key: 1234,
+        blueprintTypeID: 1234,
+        maxProductionLimit: 100,
+        activities: {
+          reaction: {
+            materials: [{ typeID: 55, quantity: 5 }],
+            products: [{ typeID: 56, quantity: 1 }],
+            time: 100,
+          },
+        },
+      },
+    ]),
+    "typeMaterials.jsonl": jsonl([
+      {
+        _key: 123456789,
+        materials: [{ materialTypeID: 34, quantity: 175 }],
+      },
+    ]),
+    "cloneGrades.jsonl": jsonl([
+      {
+        _key: 4,
+        name: "Alpha Amarr",
+        skills: [{ typeID: 3380, level: 3 }],
+      },
+      {
+        _key: 16,
+        name: "Omega",
+        skills: [{ typeID: 3380, level: 5 }],
+      },
+    ]),
+  });
+
+  const data = extractSde(archive);
+  expect(data.version).toBe("3586130");
+  expect(data.manufacturing).toEqual([
+    {
+      blueprintTypeId: "987654321",
+      maxProductionLimit: 30,
+      materials: [{ typeId: "123456789", quantity: 24000 }],
+      products: [{ typeId: "123456788", quantity: 1 }],
+      skills: [{ typeId: "3380", level: 1 }],
+      baseTimeSeconds: 6000,
+    },
+  ]);
+  expect(data.reprocessing).toEqual([
+    {
+      typeId: "123456789",
+      materials: [{ typeId: "34", quantity: 175 }],
+    },
+  ]);
+  expect(data.alphaSkillCaps).toEqual({ Amarr: { "3380": 3 } });
 });
 
 import { Store } from "../../db/store";

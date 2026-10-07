@@ -674,10 +674,22 @@ export function filterOpportunities(
   settings: Settings,
 ): Opportunity[] {
   const result: Opportunity[] = [];
+  const minimum = settings.roiEnabled
+    ? D(settings.minROI).div(100).toFixed()
+    : "0";
+  const minimumProfit = D(settings.minProfit);
   for (const base of offers) {
-    const minimum = settings.roiEnabled
-      ? D(settings.minROI).div(100).toFixed()
-      : "0";
+    // The structural scan already chose the largest profitable lot at the
+    // current minimum-profit floor. A stricter floor cannot make a smaller
+    // quantity more profitable, so discard impossible sides before walking
+    // ladders and rebuilding the detailed quote.
+    const buyCouldMeet = D(base.buy.result.profit).gte(minimumProfit);
+    const sellCouldMeet = D(base.sell.profit).gte(minimumProfit);
+    if (
+      settings.sort === "buy" ? !buyCouldMeet :
+        settings.sort === "sell" ? !sellCouldMeet :
+          !buyCouldMeet && !sellCouldMeet
+    ) continue;
     const buyQ = profitableQuantity(
       base.supply,
       base.demand,
@@ -724,11 +736,11 @@ export function filterOpportunities(
     );
     const buy =
       o.buy.fullROI !== null &&
-      D(o.buy.result.profit).gte(settings.minProfit) &&
+      D(o.buy.result.profit).gte(minimumProfit) &&
       D(o.buy.fullROI).gte(minimum);
     const sell =
       o.liquidity.sellQuantity >= quantity &&
-      D(o.sell.profit).gte(settings.minProfit) &&
+      D(o.sell.profit).gte(minimumProfit) &&
       D(o.sell.roi ?? "-1").gte(minimum);
     if (
       (!buy && !sell) ||

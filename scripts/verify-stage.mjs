@@ -25,7 +25,8 @@ for (const args of commands) {
   });
   process.stdout.write(r.stdout ?? "");
   process.stderr.write(r.stderr ?? "");
-  text += `## pnpm ${args.join(" ")}\n\nExit code: ${r.status}; ${r.status === 0 ? "PASS" : "FAIL"}\n\n\`\`\`text\n${r.stdout ?? ""}${r.stderr ?? ""}\n\`\`\`\n\n`;
+  const output = `${r.stdout ?? ""}${r.stderr ?? ""}`.replace(/[\t ]+$/gm, "");
+  text += `## pnpm ${args.join(" ")}\n\nExit code: ${r.status}; ${r.status === 0 ? "PASS" : "FAIL"}\n\n\`\`\`text\n${output}\n\`\`\`\n\n`;
   if (r.status !== 0) {
     failed = true;
     break;

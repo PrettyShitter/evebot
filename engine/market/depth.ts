@@ -4,6 +4,10 @@ export interface Level {
   price: string;
   quantity: number;
   minVolume?: number;
+  locationId?: string;
+  locationName?: string;
+  /** Present only when a synthetic level represents an unreserved project output lot. */
+  inventoryLotId?: string;
 }
 // Only frozen ladders can be cached: mutable callers must observe later edits.
 const ordered = new WeakMap<
@@ -23,9 +27,7 @@ function sortedLevels(levels: Level[], side: "buy" | "sell") {
     ordered.set(levels, { ...ordered.get(levels), [side]: sorted });
   return sorted;
 }
-export interface Fill {
-  id: string;
-  price: string;
+export interface Fill extends Level {
   quantity: number;
   value: string;
 }

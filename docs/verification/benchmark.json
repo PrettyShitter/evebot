@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-03T08:39:28.225Z",
+  "at": "2026-10-07T23:27:13.162Z",
   "machine": {
     "platform": "darwin",
     "arch": "arm64",
@@ -20,13 +20,13 @@
       }
     ]
   },
-  "hubSystems": 3,
-  "hubStations": 26,
-  "types": 19565,
+  "hubSystems": 4,
+  "hubStations": 34,
+  "types": 19719,
   "offers": 8,
-  "scanMs": 2297.4602910000003,
-  "filterMs": 0.64325000000008,
-  "rssMiB": 550.4375,
-  "peakRssMiB": 649.8125,
+  "scanMs": 3206.0218750000004,
+  "filterMs": 0.33104199999979755,
+  "rssMiB": 674.296875,
+  "peakRssMiB": 674.296875,
   "scope": "One complete real regional snapshot, buy analysis; no fabricated regional history. Synthetic seller level 5 and 800m ISK budget. Filter benchmark recomputes quantity, fees and ROI against prepared ladders; renderer latency measured separately."
 }

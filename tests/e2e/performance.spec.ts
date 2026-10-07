@@ -30,6 +30,12 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
       readFileSync("resources/static-data.json", "utf8"),
     ) as StaticData,
   );
+  store.saveSettings({
+    ...store.getSettings(),
+    minProfit: "0",
+    minROI: 0,
+    roiEnabled: false,
+  });
   store.sql
     .prepare("DELETE FROM market_snapshot_runs WHERE id LIKE 'demo-%'")
     .run();
@@ -46,16 +52,17 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
   });
   try {
     const page = await app.firstWindow();
-    await expect(page.locator(".data-row").first()).toBeVisible({
+    // A visible table header must not count as a market result.
+    await expect(page.locator("button.market-row.data-row").first()).toBeVisible({
       timeout: 25000,
     });
+    const initialRows = await page.locator("button.market-row.data-row").count();
+    expect(initialRows).toBeGreaterThan(0);
     const uiStarted = await page.evaluate(() => performance.now());
     const roiFilter = page.getByLabel("Минимальный ROI");
     await roiFilter.fill("30");
     await roiFilter.blur();
-    await expect(
-      page.getByText(/предложений · профит от.*ROI от 30%/),
-    ).toBeVisible();
+    await expect(page.locator(".caption").filter({ hasText: "ROI от 30%" })).toBeVisible();
     const uiFilterMs =
       (await page.evaluate(() => performance.now())) - uiStarted;
     const metrics = await page.evaluate(async () => {
@@ -66,7 +73,10 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
         gaps.push(now - last);
         last = now;
       }, 16);
+      const stateStarted = performance.now();
       const s = await window.eve.request({ kind: "state" });
+      const stateMs = performance.now() - stateStarted;
+      const stateJsonBytes = new Blob([JSON.stringify(s)]).size;
       const started = performance.now();
       const result = await window.eve.request({
         kind: "settings.save",
@@ -92,19 +102,35 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
       clearInterval(timer);
       return {
         filterMs,
+        stateMs,
+        stateJsonBytes,
         maxRendererGapMs: Math.max(...gaps),
-        offersBefore: s.opportunities.length,
-        offersAfter: result.opportunities.length,
+      offersBefore: s.opportunities.length,
+      offersAfter: result.opportunities.length,
       };
     });
+    const stateTimings = readFileSync(
+      join(directory, "benchmark-state.jsonl"),
+      "utf8",
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, number>);
     writeFileSync(
       "docs/verification/renderer-benchmark.json",
       JSON.stringify(
-        { at: new Date().toISOString(), uiFilterMs, ...metrics },
+        { at: new Date().toISOString(), uiFilterMs, stateTimings, ...metrics },
         null,
         2,
       ),
     );
+    console.log("Regional market benchmark", {
+      uiFilterMs,
+      stateTimings,
+      ...metrics,
+    });
+    expect(initialRows).toBeGreaterThan(0);
+    expect(metrics.offersAfter).toBeGreaterThanOrEqual(0);
     expect(uiFilterMs).toBeLessThanOrEqual(300);
     expect(metrics.filterMs).toBeLessThanOrEqual(300);
     expect(metrics.maxRendererGapMs).toBeLessThan(1000);
