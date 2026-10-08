@@ -33,16 +33,23 @@ export interface ProfileData {
   queue: z.infer<typeof queueSchema>;
   at: string;
 }
+const raceNames: Record<number, string> = {
+  1: "Amarr",
+  2: "Caldari",
+  8: "Gallente",
+  16: "Minmatar",
+};
 export async function fetchProfile(
   client: EsiClient,
   id: string,
   token: string,
 ): Promise<ProfileData> {
   const character = z
-    .object({ race: z.string() })
-    .parse(
-      (await client.get(`/characters/${id}`, undefined, id)).body,
-    );
+    .object({
+      race: z.string().optional(),
+      race_id: z.coerce.number().int().positive().optional(),
+    })
+    .parse((await client.get(`/characters/${id}`, undefined, id)).body);
   const skills = skillsSchema.parse(
     (await client.get(`/characters/${id}/skills`, token, id)).body,
   ).skills;
@@ -53,7 +60,7 @@ export async function fetchProfile(
     (await client.get(`/characters/${id}/skillqueue`, token, id)).body,
   );
   return {
-    race: character.race,
+    race: character.race ?? raceNames[character.race_id ?? -1] ?? null,
     skills,
     standings,
     queue,
