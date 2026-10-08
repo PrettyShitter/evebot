@@ -168,35 +168,48 @@ app.whenReady().then(async () => {
     async () => {
       installingUpdate = true;
       try {
-        await waitForUpdateIdle(() => syncing || pending.size > 0, {
+        // ESI wallet/production syncs write through the engine and must finish
+        // before its database is backed up. Market scans can run for a long
+        // time, so stop the worker instead of waiting for every renderer state
+        // request to drain before an update.
+        await waitForUpdateIdle(() => syncing || productionSyncing, {
           timeoutMs: UPDATE_BACKUP_TIMEOUT_MS,
         });
         const directory =
           macUpdates?.backupDirectory ??
           join(app.getPath("userData"), "backups", "pre-update-" + Date.now());
         mkdirSync(directory, { recursive: true });
-        await requestEngine(
-          { kind: "backup" },
-          join(directory, demo ? "demo.sqlite" : "portfolio.sqlite"),
-          undefined,
-          UPDATE_BACKUP_TIMEOUT_MS,
-        );
-        const other = join(
-          app.getPath("userData"),
+        // The worker may be calculating thousands of market opportunities and
+        // cannot handle a backup message until that calculation finishes.
+        // Terminate it first: SQLite rolls back any uncommitted transaction,
+        // and Store.backup then snapshots the committed database including WAL.
+        const activeWorker = worker;
+        await activeWorker.terminate();
+        for (const p of pending.values()) {
+          clearTimeout(p.timer);
+          p.reject(new Error("Приложение обновляется"));
+        }
+        pending.clear();
+        engineReady = false;
+        for (const name of [
+          demo ? "demo.sqlite" : "portfolio.sqlite",
           demo ? "portfolio.sqlite" : "demo.sqlite",
-        );
-        if (existsSync(other)) {
-          const db = new Store(other, join(__dirname, "../../db/migrations"));
+        ]) {
+          const source = join(app.getPath("userData"), name);
+          if (!existsSync(source)) continue;
+          const db = new Store(source, join(__dirname, "../../db/migrations"));
           try {
-            await db.backup(
-              join(directory, demo ? "portfolio.sqlite" : "demo.sqlite"),
-            );
+            await db.backup(join(directory, name));
           } finally {
             db.close();
           }
         }
         quitting = true;
       } catch (error) {
+        if (!engineReady) {
+          engineFailed = false;
+          startWorker();
+        }
         installingUpdate = false;
         throw error;
       }
