@@ -13,6 +13,7 @@ import { Store } from "../../db/store";
 import { importStatic, type StaticData } from "../../engine/market/static-data";
 import { Portfolio } from "../../engine/portfolio/repository";
 test("stage 9: full saved regional dataset, local filter latency and renderer responsiveness", async () => {
+  test.setTimeout(120_000);
   test.skip(
     process.env.EVE_BENCHMARK !== "1" || !existsSync(".cache/benchmark.sqlite"),
     "Opt-in saved public snapshot, see scripts/benchmark.ts",
@@ -92,6 +93,22 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
   const adjustedPrices = new Map([["34", "3.6"], ["35", "15.5"], ["36", "45"], ["37", "152"], ["587", "200000"]]);
   const adjustedInsert = store.sql.prepare("INSERT INTO production_adjusted_prices(type_id,adjusted_price,observed_at) VALUES (?,?,?) ON CONFLICT(type_id) DO UPDATE SET adjusted_price=excluded.adjusted_price,observed_at=excluded.observed_at");
   for (const [typeId, price] of adjustedPrices) adjustedInsert.run(typeId, price, observedAt);
+  const contractInsert = store.sql.prepare(
+    `INSERT INTO production_contract_sources(contract_id,region_id,location_id,contract_type,status,price,expires_at,items_payload,observed_at,coverage_status)
+     VALUES (?, '10000002','60003760','item_exchange','outstanding','250000',?,?,?,'available')`,
+  );
+  for (let index = 0; index < 24; index++) {
+    const contractId = String(90001000 + index);
+    contractInsert.run(
+      contractId,
+      new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      JSON.stringify({ title: `Benchmark BPC ${index}`, blueprintOnly: true, includedItemCount: 1, items: [{
+        recordId: String(90002000 + index), typeId: "683", quantity: 1,
+        isBlueprintCopy: true, materialEfficiency: 0, timeEfficiency: 0, runs: 1,
+      }] }),
+      observedAt,
+    );
+  }
   const orderInsert = store.sql.prepare("INSERT INTO market_orders(generation,id,type_id,location_id,payload) VALUES (?,?,?,?,?)");
   const benchmarkOrders = [
     { typeId: "587", buy: true, price: "750000", quantity: 100, locationId: "60003757" },
@@ -227,7 +244,7 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     expect(metrics.productionOffers).toBeGreaterThan(0);
     expect(metrics.productionCandidates).toContain("Rifter");
     expect(metrics.productionReadiness.marketBpoCandidatesTotal).toBeGreaterThan(40);
-    expect(metrics.productionReadiness.marketBpoCandidatesScanned).toBeGreaterThan(0);
+    expect(metrics.productionReadiness.marketBpoCandidatesScanned).toBeGreaterThanOrEqual(32);
     expect(metrics.productionReadiness.marketBpoScanComplete).toBe(false);
     expect(uiFilterMs).toBeLessThanOrEqual(300);
     expect(metrics.filterMs).toBeLessThanOrEqual(300);
@@ -236,8 +253,36 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     await page.getByRole("tab", { name: "Производство" }).click();
     await expect(page.locator('[aria-label="Производственные предложения"]').getByText("Rifter").first()).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "В фоне анализируются рыночные BPO" })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "В фоне проверяются BPC-контракты" })).toBeVisible();
     await page.locator('[aria-label="Производственные предложения"]').scrollIntoViewIfNeeded();
     await page.screenshot({ path: "test-results/production-large-market-benchmark.png" });
+    let fullScan = await page.evaluate(() => window.eve.request({ kind: "state" }));
+    const scanStartedAt = Date.now();
+    for (let attempt = 0; attempt < 30 && (!fullScan.production.marketBpoScanComplete || !fullScan.production.contractScanComplete); attempt++) {
+      // Production summaries are cached for one second; the app normally
+      // refreshes every three seconds. Exercise the same incremental path.
+      await page.waitForTimeout(1100);
+      fullScan = await page.evaluate(() => window.eve.request({ kind: "state" }));
+    }
+    const fullScanResult = {
+      scanned: fullScan.production.marketBpoCandidatesScanned,
+      total: fullScan.production.marketBpoCandidatesTotal,
+      complete: fullScan.production.marketBpoScanComplete,
+      contractScanned: fullScan.production.contractCandidatesScanned,
+      contractTotal: fullScan.production.contractCandidatesTotal,
+      contractComplete: fullScan.production.contractScanComplete,
+      elapsedMs: Date.now() - scanStartedAt,
+    };
+    console.log("Completed production opportunity scan", fullScanResult);
+    const benchmarkReport = JSON.parse(readFileSync("docs/verification/renderer-benchmark.json", "utf8")) as Record<string, unknown>;
+    benchmarkReport.fullProductionScan = fullScanResult;
+    writeFileSync("docs/verification/renderer-benchmark.json", `${JSON.stringify(benchmarkReport, null, 2)}\n`);
+    expect(fullScanResult.total).toBeGreaterThan(600);
+    expect(fullScanResult.scanned).toBe(fullScanResult.total);
+    expect(fullScanResult.complete).toBe(true);
+    expect(fullScanResult.contractScanned).toBe(fullScanResult.contractTotal);
+    expect(fullScanResult.contractTotal).toBe(24);
+    expect(fullScanResult.contractComplete).toBe(true);
   } finally {
     await app.close();
     rmSync(directory, { recursive: true, force: true });

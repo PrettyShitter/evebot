@@ -440,8 +440,9 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
               </div>
               <span className="badge">{visibleContractOffers.length} из {production.contractOffers.length}</span>
             </div>
+            {production.contractCandidatesTotal > 0 && <p className="caption" role="status">{production.contractScanComplete ? "Проверка BPC-контрактов завершена" : "В фоне проверяются BPC-контракты"}: обработано {production.contractCandidatesScanned} из {production.contractCandidatesTotal}.</p>}
             {!visibleContractOffers.length ? (
-              <p className="caption rounded border border-border p-3">Нет контрактов с известными ME/TE/runs, подходящим рецептом SDE и подтверждённой производственной станцией.</p>
+              <p className="caption rounded border border-border p-3">{!production.contractScanComplete ? "Список контрактов ещё рассчитывается. Уже найденные предложения появятся здесь автоматически." : "Нет контрактов с известными ME/TE/runs, подходящим рецептом SDE и подтверждённой производственной станцией."}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[880px] text-sm">

@@ -542,10 +542,12 @@ function selected(items: { id: string; quantity: number }[]) {
   });
 }
 let productionOfferCacheKey = "";
-let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true };
+let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "contractCandidatesScanned" | "contractCandidatesTotal" | "contractScanComplete"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, contractCandidatesScanned: 0, contractCandidatesTotal: 0, contractScanComplete: true };
 let productionMarketBpoProgress = 0;
 let productionMarketBpoTotal = 0;
 let productionMarketBpoScanKey = "";
+let productionContractProgress = 0;
+let productionContractTotal = 0;
 const productionQuoteHandlers = new Map<string, { maxRuns: number; estimateAt: (runs: number) => ManufacturingEstimate }>();
 const productionRequestedRuns = new Map<string, number>();
 let reprocessingOfferCacheKey = "";
@@ -597,8 +599,8 @@ function productionCapital(main: AppState["characters"][number] | undefined) {
 function manufacturingOffers(
   productionStatic: StaticData,
   main: AppState["characters"][number] | undefined,
-): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete"> {
-  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true };
+): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "contractCandidatesScanned" | "contractCandidatesTotal" | "contractScanComplete"> {
+  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, contractCandidatesScanned: 0, contractCandidatesTotal: 0, contractScanComplete: true };
   if (!main || !market.data) return empty;
   const hubSystems = new Set(["30000142", "30000144"]);
   const hubStations = productionStatic.stations.filter((station) =>
@@ -793,11 +795,13 @@ function manufacturingOffers(
   ]);
   const reuseProfileCache = productionOfferCacheKey === profileKey;
   const resumingMarketBpoScan = productionMarketBpoScanKey === marketBpoScanKey;
-  if (reuseProfileCache && resumingMarketBpoScan && productionMarketBpoProgress >= productionMarketBpoTotal)
+  if (reuseProfileCache && resumingMarketBpoScan && productionMarketBpoProgress >= productionMarketBpoTotal && productionContractProgress >= productionContractTotal)
     return productionOfferCache;
   if (!resumingMarketBpoScan) {
     productionMarketBpoProgress = 0;
     productionMarketBpoTotal = 0;
+    productionContractProgress = 0;
+    productionContractTotal = contractBlueprints.length;
     productionMarketBpoScanKey = marketBpoScanKey;
   }
   productionQuoteHandlers.clear();
@@ -1010,6 +1014,10 @@ function manufacturingOffers(
   const marketBpoCandidateCount = resumingMarketBpoScan
     ? Math.min(productionMarketBpoProgress + selectedMarketBpos.length, boundedMarketBpos.length)
     : 0;
+  const contractBatchSize = 8;
+  const selectedContractBlueprints = resumingMarketBpoScan && productionContractProgress < contractBlueprints.length
+    ? contractBlueprints.slice(productionContractProgress, productionContractProgress + contractBatchSize)
+    : [];
   const chainRecipesAt = (station: Station, forcedRoot: ChainRecipe): ChainRecipe[] => {
     // A structure's rig modifiers are output-specific. Until the exact modifiers
     // for every intermediate product are confirmed, buy chain components instead
@@ -1299,6 +1307,14 @@ function manufacturingOffers(
           estimate = requestedEstimate;
       }
       const productName = nameOf(output.typeId);
+      const marketSignal = productionMarketSignal({
+        history: historyFor(output.typeId, station.regionId),
+        asOf: new Date().toISOString(),
+        regionName: regionName(station.regionId),
+        outputQuantity: estimate.outputQuantity,
+        bids: orderLevels(output.typeId, "demand", station),
+        asks: orderLevels(output.typeId, "supply", station),
+      });
       offers.push({
         id: `${blueprint.item_id}:${station.id}:${estimate.runs}`,
         itemName: productName,
@@ -1316,19 +1332,12 @@ function manufacturingOffers(
         estimate,
         chainPlan: chainCache.get(estimate.runs)?.plan ?? planAt(estimate.runs).plan,
         chainExecutable: blueprint.sourceKind === "owned" && chainCache.get(estimate.runs)?.plan.status === "ready",
-        marketSignal: productionMarketSignal({
-          history: historyFor(output.typeId, station.regionId),
-          asOf: new Date().toISOString(),
-          regionName: regionName(station.regionId),
-          outputQuantity: estimate.outputQuantity,
-          bids: orderLevels(output.typeId, "demand", station),
-          asks: orderLevels(output.typeId, "supply", station),
-        }),
+        marketSignal,
         observedAt: marketData.snapshots.map((snapshot) => snapshot.modifiedAt).sort().at(-1) ?? row.observed_at,
       });
     }
   }
-  for (const candidate of contractBlueprints) {
+  for (const candidate of selectedContractBlueprints) {
     const { contract, item } = candidate;
     const recipe = recipeByBlueprint.get(item.typeId);
     const station = hubStations.find((entry) => entry.id === contract.location_id);
@@ -1481,18 +1490,29 @@ function manufacturingOffers(
   productionMarketBpoProgress = resumingMarketBpoScan
     ? Math.min(productionMarketBpoProgress + selectedMarketBpos.length, boundedMarketBpos.length)
     : 0;
+  productionContractProgress = resumingMarketBpoScan
+    ? Math.min(productionContractProgress + selectedContractBlueprints.length, contractBlueprints.length)
+    : 0;
   const mergedOffers = new Map<string, AppState["production"]["offers"][number]>();
+  const mergedContractOffers = new Map<string, AppState["production"]["contractOffers"][number]>();
   if (resumingMarketBpoScan)
     for (const offer of productionOfferCache.offers) mergedOffers.set(offer.id, offer);
+  if (resumingMarketBpoScan)
+    for (const offer of productionOfferCache.contractOffers) mergedContractOffers.set(offer.id, offer);
   for (const offer of offers) mergedOffers.set(offer.id, offer);
+  for (const offer of contractOffers) mergedContractOffers.set(offer.id, offer);
   productionOfferCacheKey = profileKey;
   productionOfferCache = {
     offers: [...mergedOffers.values()].sort((a, b) => offerScore(b.estimate, b.blueprintSource.kind === "market_bpo")
       .comparedTo(offerScore(a.estimate, a.blueprintSource.kind === "market_bpo"))).slice(0, 100),
-    contractOffers: contractOffers.slice(0, 100),
+    contractOffers: [...mergedContractOffers.values()].sort((a, b) => offerScore(b.estimate, true)
+      .comparedTo(offerScore(a.estimate, true))).slice(0, 100),
     marketBpoCandidatesScanned: marketBpoCandidateCount,
     marketBpoCandidatesTotal: boundedMarketBpos.length,
     marketBpoScanComplete: productionMarketBpoProgress >= boundedMarketBpos.length,
+    contractCandidatesScanned: productionContractProgress,
+    contractCandidatesTotal: contractBlueprints.length,
+    contractScanComplete: productionContractProgress >= contractBlueprints.length,
   };
   return productionOfferCache;
 }
@@ -2487,6 +2507,9 @@ function productionSummary(): AppState["production"] {
     marketBpoCandidatesScanned: manufacturing.marketBpoCandidatesScanned,
     marketBpoCandidatesTotal: manufacturing.marketBpoCandidatesTotal,
     marketBpoScanComplete: manufacturing.marketBpoScanComplete,
+    contractCandidatesScanned: manufacturing.contractCandidatesScanned,
+    contractCandidatesTotal: manufacturing.contractCandidatesTotal,
+    contractScanComplete: manufacturing.contractScanComplete,
     contractOffers: manufacturing.contractOffers,
     reprocessingOffers: reprocessingOffers(productionStatic, main),
     projects,

@@ -401,7 +401,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       "esi-industry.read_character_jobs.v1",
     ]);
 
-    const confirmedNpc = await request(undefined, {
+    let confirmedNpc = await request(undefined, {
       kind: "production.facility.save",
       locationId: "60003760",
       services: ["manufacturing"],
@@ -409,6 +409,12 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       evidence: "Fixture-only confirmed manufacturing profile",
     });
     expect(confirmedNpc.error).toBeUndefined();
+    for (let attempt = 0; attempt < 10 && !confirmedNpc.value?.production.contractScanComplete; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+      confirmedNpc = await request(undefined, { kind: "state" });
+      expect(confirmedNpc.error).toBeUndefined();
+    }
+    expect(confirmedNpc.value?.production.contractScanComplete).toBe(true);
     expect(confirmedNpc.value?.production.contractOffers).toHaveLength(4);
     expect(confirmedNpc.value?.production.contractOffers).toContainEqual(expect.objectContaining({
       contractId: "88001", contractPrice: "1000", blueprintCopies: 1, bundleRuns: 2,

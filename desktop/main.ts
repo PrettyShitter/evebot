@@ -548,7 +548,7 @@ app.whenReady().then(async () => {
   await window.loadURL(entry);
   const initialState = await requestEngine({ kind: "state" });
   macUpdates?.acknowledgeHealthy(process.argv);
-  if (!demo) {
+  if (!demo && process.env.EVE_BENCHMARK !== "1") {
     const wallets =
       initialState.characters.length === 3 &&
       initialState.characters.every((c) => c.status !== "revoked")
@@ -557,12 +557,12 @@ app.whenReady().then(async () => {
     // Public facilities, indices, prices, and contract listings do not require
     // a connected character. Keep them available even when wallet auth expires.
     void wallets.then(() => syncProduction()).catch(() => {});
+    const productionRefresh = setInterval(
+      () => void syncProduction().catch(() => {}),
+      30 * 60 * 1000,
+    );
+    productionRefresh.unref();
   }
-  const productionRefresh = setInterval(
-    () => void syncProduction().catch(() => {}),
-    30 * 60 * 1000,
-  );
-  productionRefresh.unref();
 });
 app.on("window-all-closed", () => {
   if (quitting) app.quit();
