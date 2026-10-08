@@ -1,68 +1,68 @@
 {
-  "at": "2026-10-08T02:31:05.783Z",
-  "uiFilterMs": 57.5,
+  "at": "2026-10-08T03:49:34.970Z",
+  "uiFilterMs": 51.39999997615814,
   "stateTimings": [
     {
-      "productionMs": 766.315458,
-      "opportunitiesMs": 4.261958999999933,
-      "detailMs": 2.001457999999957,
-      "totalMs": 773.147584,
+      "productionMs": 665.2368339999999,
+      "opportunitiesMs": 3.411375000000021,
+      "detailMs": 1.463624999999979,
+      "totalMs": 670.620625,
       "offerCount": 0,
       "productionOfferCount": 1
     },
     {
-      "productionMs": 0.03791700000010678,
-      "opportunitiesMs": 0.7858749999998054,
-      "detailMs": 3.8859580000000733,
-      "totalMs": 4.885541999999987,
+      "productionMs": 0.009916000000089298,
+      "opportunitiesMs": 0.2604999999999791,
+      "detailMs": 3.3328339999999343,
+      "totalMs": 3.770208000000025,
       "offerCount": 0,
       "productionOfferCount": 1
     },
     {
-      "productionMs": 2269.1932920000004,
-      "opportunitiesMs": 0.28716699999949924,
-      "detailMs": 0.9443330000003698,
-      "totalMs": 2270.868,
+      "productionMs": 2172.741458,
+      "opportunitiesMs": 0.29383400000006077,
+      "detailMs": 0.9460829999998168,
+      "totalMs": 2174.546459,
       "offerCount": 9,
       "productionOfferCount": 26
     },
     {
-      "productionMs": 0.019792000000052212,
-      "opportunitiesMs": 2.386790999999903,
-      "detailMs": 1.8813749999999345,
-      "totalMs": 4.501125000000684,
+      "productionMs": 0.01679100000001199,
+      "opportunitiesMs": 1.6648339999992459,
+      "detailMs": 1.631416000000172,
+      "totalMs": 3.4598750000004657,
       "offerCount": 4,
       "productionOfferCount": 26
     },
     {
-      "productionMs": 0.011000000000422006,
-      "opportunitiesMs": 0.29720799999995506,
-      "detailMs": 1.2909169999993537,
-      "totalMs": 1.724500000000262,
+      "productionMs": 0.01187500000014552,
+      "opportunitiesMs": 0.2790000000004511,
+      "detailMs": 1.1864999999997963,
+      "totalMs": 1.6202079999993657,
       "offerCount": 4,
       "productionOfferCount": 26
     },
     {
-      "productionMs": 0.009624999999687134,
-      "opportunitiesMs": 0.6636250000001382,
-      "detailMs": 1.0657920000003287,
-      "totalMs": 1.7936250000002474,
+      "productionMs": 0.01937499999985448,
+      "opportunitiesMs": 0.6338340000002063,
+      "detailMs": 1.0187079999996058,
+      "totalMs": 1.7354999999997744,
       "offerCount": 1,
       "productionOfferCount": 26
     },
     {
-      "productionMs": 0.00687500000003638,
-      "opportunitiesMs": 0.5952919999999722,
-      "detailMs": 1.203125,
-      "totalMs": 1.8535000000001673,
+      "productionMs": 0.006874999999126885,
+      "opportunitiesMs": 0.5692500000004657,
+      "detailMs": 1.090291999999863,
+      "totalMs": 1.709791000000223,
       "offerCount": 1,
       "productionOfferCount": 26
     }
   ],
-  "filterMs": 13.099999964237213,
-  "stateMs": 13.700000047683716,
+  "filterMs": 12.699999988079071,
+  "stateMs": 13,
   "stateJsonBytes": 595238,
-  "maxRendererGapMs": 18,
+  "maxRendererGapMs": 17.5,
   "offersBefore": 4,
   "offersAfter": 1,
   "productionOffers": 26,
@@ -138,6 +138,6 @@
     "contractScanned": 24,
     "contractTotal": 24,
     "contractComplete": true,
-    "elapsedMs": 33718
+    "elapsedMs": 33701
   }
 }
