@@ -68,8 +68,6 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const [saleQuantities, setSaleQuantities] = useState<Record<string, string>>({});
   const [manufacturingRuns, setManufacturingRuns] = useState<Record<string, string>>({});
   const [reprocessingQuantities, setReprocessingQuantities] = useState<Record<string, string>>({});
-  const [showAllBlueprintContracts, setShowAllBlueprintContracts] = useState(false);
-  const [contractBpcConfirmations, setContractBpcConfirmations] = useState<Record<string, { me: string; te: string; runs: string; evidence: string }>>({});
   const [projectFilter, setProjectFilter] = useState<"all" | "pinned" | "active" | "completed">("all");
   const [reprocessOutputs, setReprocessOutputs] = useState<Record<string, Record<string, string>>>({});
   const [reprocessInputs, setReprocessInputs] = useState<Record<string, string>>({});
@@ -111,13 +109,6 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const hasMarketUpdates = !!acknowledgedPublicSyncAt && !!production.publicSyncedAt &&
     production.publicSyncedAt !== acknowledgedPublicSyncAt;
   const isSyncing = busy || production.syncing;
-  const visibleBlueprintContracts = showAllBlueprintContracts
-    ? production.blueprintContracts
-    : production.blueprintContracts.slice(0, 5);
-  const bpcItemsNeedConfirmation = production.blueprintContracts.reduce(
-    (count, contract) => count + contract.blueprints.filter((blueprint) => !blueprint.attributesKnown && blueprint.quantity > 0).length,
-    0,
-  );
   const visibleProjects = production.projects.filter((project) => {
     if (projectFilter === "pinned") return project.status === "pinned";
     if (projectFilter === "active") return !["pinned", "completed", "cancelled"].includes(project.status);
@@ -364,156 +355,6 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
             </p>
           )}
 
-          <div className="panel space-y-3" aria-label="Публичные контракты с копиями чертежей">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="font-medium">BPC в публичных контрактах Jita / Perimeter</h2>
-                <p className="caption mt-1">Берём ME/TE/runs из ESI, если они доступны. Неизвестные атрибуты можно сверить в клиенте EVE и подтвердить вручную; это не резервирует контракт и не подтверждает его покупку.</p>
-              </div>
-              <span className="badge">
-                {production.contractCoverage.fetchedContracts}/{production.contractCoverage.candidateContracts} проверено
-              </span>
-            </div>
-            {!production.contractCoverage.complete && (
-              <p className="caption rounded border border-amber-700/50 p-3">ESI не дал полный список контрактов. Сохранены предыдущие данные; повторите синхронизацию.</p>
-            )}
-            {production.contractCoverage.capped && production.contractCoverage.complete && (
-              <p className="caption rounded border border-amber-700/50 p-3">Кандидатов больше лимита сканирования; показана ограниченная часть. Полный охват не подтверждён.</p>
-            )}
-            {production.contractCoverage.itemErrors > 0 && (
-              <p className="caption">Не удалось прочитать состав {production.contractCoverage.itemErrors} контрактов.</p>
-            )}
-            {bpcItemsNeedConfirmation > 0 && (
-              <p className="caption rounded border border-amber-700/50 p-3">{bpcItemsNeedConfirmation} записей BPC без атрибутов ESI пока исключены из расчётов. Для свежей записи можно вручную сверить атрибуты одного экземпляра или одинакового стека копий в игре.</p>
-            )}
-            {!production.blueprintContracts.length ? (
-              <p className="caption">Копий чертежей с доступными атрибутами пока не найдено. Контрактные чертежи ещё не включены в готовые расчёты партий.</p>
-            ) : (
-              <div className="space-y-2">
-                {visibleBlueprintContracts.map((contract) => (
-                  <article key={contract.contractId} className="rounded border border-border p-3">
-                    <div className="flex flex-wrap justify-between gap-2">
-                      <div className="font-medium">{contract.title || "Публичный контракт"} · {contract.locationName}</div>
-                      <div className="tabular-nums">{isk(contract.price)} · до {timestamp(contract.expiresAt)}</div>
-                    </div>
-                    <div className="mt-2 space-y-1">
-                      {contract.blueprints.map((blueprint) => {
-                        const key = `${contract.contractId}:${blueprint.recordId}`;
-                        const values = contractBpcConfirmations[key] ?? { me: "", te: "", runs: "", evidence: "" };
-                        const valid = [values.me, values.te, values.runs].every((value) => value.trim() !== "" && Number.isInteger(Number(value))) && Number(values.me) >= 0 && Number(values.me) <= 10 && Number(values.te) >= 0 && Number(values.te) <= 20 && Number(values.runs) > 0 && values.evidence.trim().length >= 8;
-                        return (
-                          <div key={key} className="caption rounded border border-border/60 p-2">
-                            <div className="flex flex-wrap justify-between gap-2">
-                              <span><CopyName name={blueprint.typeName} onCopy={copyName} /> · {blueprint.quantity} BPC · запись #{blueprint.recordId}</span>
-                              <span>{blueprint.attributesKnown ? `ME ${blueprint.materialEfficiency} · TE ${blueprint.timeEfficiency} · ${blueprint.runs} runs${blueprint.attributesSource === "manual" ? ` · вручную ${timestamp(blueprint.confirmedAt)}: ${blueprint.evidence}` : blueprint.attributesSource === "conflict" ? ` · ESI расходится с ручной сверкой от ${timestamp(blueprint.confirmedAt)}; расчёт использует ESI` : " · данные ESI"}` : "Атрибуты неизвестны — требуется сверка в игре"}</span>
-                            </div>
-                            {!blueprint.attributesKnown && blueprint.quantity > 0 && (
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                                <Input aria-label={`ME контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="10" step="1" placeholder="ME 0–10" value={values.me} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, me: event.target.value } }))} />
-                                <Input aria-label={`TE контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="20" step="1" placeholder="TE 0–20" value={values.te} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, te: event.target.value } }))} />
-                                <Input aria-label={`Прогоны контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="1" step="1" placeholder="Осталось прогонов" value={values.runs} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, runs: event.target.value } }))} />
-                                <Input aria-label={`Свидетельство контракта ${contract.contractId}, запись ${blueprint.recordId}`} placeholder="Где проверено в EVE" value={values.evidence} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, evidence: event.target.value } }))} />
-                                <div className="caption sm:col-span-2 lg:col-span-4">Откройте контракт в игре и сверьте ME, TE и оставшиеся прогоны. Атрибуты применятся ко всем {blueprint.quantity} копиям в записи #{blueprint.recordId}; подтверждайте только если это один одинаковый стек. Цена всего набора всё равно нужна для покупки.</div>
-                                <Button type="button" size="sm" disabled={!valid || busy} onClick={() => void request({
-                                  kind: "production.contract.blueprint.confirm",
-                                  contractId: contract.contractId,
-                                  recordId: blueprint.recordId,
-                                  blueprintTypeId: blueprint.typeId,
-                                  materialEfficiency: Number(values.me),
-                                  timeEfficiency: Number(values.te),
-                                  runs: Number(values.runs),
-                                  evidence: values.evidence.trim(),
-                                })}>Подтвердить атрибуты из игры</Button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="caption mt-2">
-                      Контракт #{contract.contractId}; {contract.includedItemCount} включённых позиций. {contract.blueprintOnly ? "Только чертежи." : "Смешанный набор: расчёт использует полную цену контракта и не засчитывает остальные предметы как выручку."}
-                    </div>
-                    <div className="caption">
-                      {contract.manufacturingEligibility === "candidate"
-                        ? "Копии с известными атрибутами и рецептом; цена контракта оплачивается целиком, а стоимость распределяется по прогонам."
-                        : contract.manufacturingEligibility === "mixed_contract"
-                          ? "Не участвует в расчёте: цена включает другие предметы, их стоимость/ценность отдельно не оценена."
-                          : contract.manufacturingEligibility === "multiple_copies"
-                            ? "Не участвует в расчёте: контракт содержит несколько копий или набор копий."
-                            : contract.manufacturingEligibility === "unknown_attributes"
-                              ? "Не участвует в расчёте: неизвестны ME/TE/runs; проверьте копию в игре."
-                              : "Не участвует в расчёте: рецепт не найден в установленном SDE."}
-                    </div>
-                  </article>
-                ))}
-                {production.blueprintContracts.length > 5 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    aria-expanded={showAllBlueprintContracts}
-                    onClick={() => setShowAllBlueprintContracts((value) => !value)}
-                  >
-                    {showAllBlueprintContracts
-                      ? "Свернуть список контрактов"
-                      : `Показать все контракты (${production.blueprintContracts.length})`}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {activityFilter !== "reprocessing" && <div className="panel space-y-3" aria-label="Предложения по публичным BPC-контрактам">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="font-medium">Производство с покупкой BPC-контракта</h2>
-                <p className="caption mt-1">Для набора требуется вся сумма контракта. Себестоимость выбранной партии получает долю цены BPC по прогонам, оставшиеся копии и их стоимость сохраняются. Покупку нужно выполнить вручную; после синхронизации принадлежащие BPC появятся среди обычных предложений.</p>
-              </div>
-              <span className="badge">{orderedContractOffers.length} из {production.contractOffers.length}</span>
-            </div>
-            {production.contractCandidatesTotal > 0 && <p className="caption" role="status">{production.contractScanComplete ? "Проверка BPC-контрактов завершена" : "В фоне проверяются BPC-контракты"}: обработано {production.contractCandidatesScanned} из {production.contractCandidatesTotal}.</p>}
-            {!orderedContractOffers.length ? (
-              <p className="caption rounded border border-border p-3">{!production.contractScanComplete ? "Список контрактов ещё рассчитывается. Уже найденные предложения появятся здесь автоматически." : "Нет контрактов с известными ME/TE/runs, подходящим рецептом SDE и подтверждённой производственной станцией."}</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[880px] text-sm">
-                  <thead><tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="p-2">Результат / контракт</th><th className="p-2 text-right">Прогоны / объём</th>
-                    <th className="p-2 text-right">Вложения</th><th className="p-2 text-right">Сразу</th><th className="p-2 text-right">Sell-order</th>
-                  </tr></thead>
-                  <tbody>{orderedContractOffers.map((offer) => (
-                    <tr key={offer.id} className="border-b border-border align-top">
-                      <td className="p-2"><CopyName name={offer.itemName} onCopy={copyName} />
-                        <div className="caption mt-1">{offer.contractTitle} · {offer.pickupLocation} · контракт проверен {timestamp(offer.contractObservedAt)} · рынок {timestamp(offer.observedAt)} · до {timestamp(offer.expiresAt)}</div>
-                        <div className="caption">Контракт #{offer.contractId} · <CopyName name={offer.blueprintTypeName} onCopy={copyName} /> · {offer.facilityName} · {offer.includedItemCount} позиций</div>
-                        <div className="caption">Копий этого чертежа в наборе: {offer.blueprintCopies} · суммарно {offer.bundleRuns} прогонов</div>
-                        {!offer.blueprintOnly && <div className="caption text-amber-300">Смешанный контракт: в затраты включена вся сумма {isk(offer.contractPrice)}; остальные предметы не оцениваются и не добавляют прибыль.</div>}
-                        <MarketSignalView signal={offer.marketSignal} />
-                        {offer.estimate.warnings.map((warning) => <div key={warning} className="caption text-amber-300">{warning}</div>)}
-                        <details className="mt-2">
-                          <summary className="cursor-pointer text-xs text-muted-foreground">Полная цепочка make/buy</summary>
-                          <div className="mt-2 space-y-1">
-                            {offer.chainPlan.reasons.map((reason) => <div key={reason} className="caption text-amber-300">{reason}</div>)}
-                            {offer.chainPlan.actions.map((action) => <div key={action.id} className="flex justify-between gap-3 text-xs">
-                              <span>{action.kind === "manufacturing" ? "Изготовить" : "Купить"} <CopyName name={action.typeName ?? `Type ${action.typeId}`} onCopy={copyName} /> · {action.kind === "manufacturing" ? `${action.runs} прог.` : `${action.quantity.toLocaleString("ru-RU")} шт.`}{action.facilityName ? ` · ${action.facilityName}` : ""}
-                                {action.kind === "purchase" && action.sources?.map((source) => <span key={source.id} className="caption block pl-2">{source.inventoryLotId ? "Остаток проекта" : "Рыночный ордер"} · {source.locationName ?? source.locationId ?? "площадка неизвестна"} · {source.quantity.toLocaleString("ru-RU")} шт. × {isk(source.unitCost)}</span>)}
-                              </span>
-                              <span className="shrink-0">{isk(action.cost)}</span>
-                            </div>)}
-                            <div className="caption border-t border-border pt-1">Полная цепочка: {isk(offer.chainPlan.totalCost)} ISK</div>
-                          </div>
-                        </details>
-                      </td>
-                      <td className="p-2 text-right tabular-nums">{offer.runs} прогонов<div className="caption">{offer.estimate.outputQuantity.toLocaleString("ru-RU")} шт.</div></td>
-                      <td className="p-2 text-right tabular-nums">{isk(offer.estimate.totalCost)}<div className="caption">Контракт целиком {isk(offer.contractPrice)} · в партии учтено BPC {isk(offer.estimate.blueprintAcquisitionCost ?? "0")} · сырьё {isk(offer.estimate.materialsCost)}</div><div className="caption">Остаётся после партии: {Math.max(0, offer.bundleRuns - offer.estimate.runs)} прогонов копий</div><div className="caption">К оплате для запуска: {isk(offer.estimate.cashRequired)}</div></td>
-                      <td className="p-2 text-right tabular-nums"><strong>{isk(offer.estimate.firstCycleProfit.immediate)}</strong><div className="caption">ROI первого цикла {offer.estimate.firstCycleRoi.immediate === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.immediate) * 100).toFixed(1)}%`}</div><div className="caption">Операционная прибыль партии: {isk(offer.estimate.immediate.netProfit)}</div></td>
-                      <td className="p-2 text-right tabular-nums"><strong>{isk(offer.estimate.firstCycleProfit.sellOrder)}</strong><div className="caption">цена {isk(offer.estimate.sellOrder.unitPrice)} / шт.</div><div className="caption">ROI первого цикла {offer.estimate.firstCycleRoi.sellOrder === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.sellOrder) * 100).toFixed(1)}%`}</div><div className="caption">Операционная прибыль партии: {isk(offer.estimate.sellOrder.netProfit)}</div></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            )}
-          </div>}
-
           <div className="panel grid gap-3 sm:grid-cols-2 lg:grid-cols-6" aria-label="Фильтры производственных предложений">
             <label className="space-y-1 text-sm">
               <span className="caption">Вид деятельности</span>
@@ -559,24 +400,26 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
           {activityFilter !== "reprocessing" && <div className="panel space-y-4" aria-label="Производственные предложения">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="font-medium">Готовые производственные предложения</h2>
+                <h2 className="font-medium">Выгодные предложения крафта</h2>
                 <p className="caption mt-1">
-                  Учитываются имеющиеся чертежи и одиночные sell-ордера BPO на станциях хабов. Для BPO покупки отдельно показаны денежный результат первого цикла и окупаемость; купить и синхронизировать оригинал нужно в игре.
+                  Один список включает принадлежащие чертежи, рыночные BPO и публичные BPC-контракты. В контрактных предложениях стоимость всего контракта включена в сумму закупки, чистую прибыль и ROI.
                 </p>
               </div>
-              <span className="badge">{orderedManufacturingOffers.length} из {production.offers.length} · только полный стакан</span>
+              <span className="badge">{orderedManufacturingOffers.length + orderedContractOffers.length} из {production.offers.length + production.contractOffers.length} · только полный стакан</span>
             </div>
             {production.marketBpoCandidatesTotal > 0 && <p className="caption" role="status">{production.marketBpoScanComplete ? "Анализ рыночных BPO завершён" : "В фоне анализируются рыночные BPO"}: проверено {production.marketBpoCandidatesScanned} из {production.marketBpoCandidatesTotal}.</p>}
-            {!orderedManufacturingOffers.length && production.offers.length ? (
+            {production.contractCandidatesTotal > 0 && <p className="caption" role="status">{production.contractScanComplete ? "Проверка контрактов завершена" : "В фоне проверяются контракты на BPC"}: обработано {production.contractCandidatesScanned} из {production.contractCandidatesTotal}. Найденные крафт-сделки отображаются в этой же таблице.</p>}
+            {(!production.contractCoverage.complete || production.contractCoverage.capped || production.contractCoverage.itemErrors > 0) && <p className="caption rounded border border-amber-700/50 p-3">Покрытие публичных контрактов неполное: ESI прочитал {production.contractCoverage.fetchedContracts} из {production.contractCoverage.candidateContracts}; ошибок состава {production.contractCoverage.itemErrors}{production.contractCoverage.capped ? "; достигнут лимит сканирования" : ""}. Список сделок может быть неполным.</p>}
+            {!orderedManufacturingOffers.length && !orderedContractOffers.length && (production.offers.length + production.contractOffers.length) > 0 ? (
               <p className="caption rounded-md border border-border p-4 text-center">
                 Предложения скрыты текущими фильтрами. Снизьте минимальную прибыль, увеличьте лимит себестоимости или очистите поиск типа.
               </p>
-            ) : !orderedManufacturingOffers.length ? (
+            ) : !orderedManufacturingOffers.length && !orderedContractOffers.length ? (
               <div className="rounded-md border border-border p-5 text-center">
                 <Boxes className="mx-auto text-muted-foreground" size={22} />
                 <p className="mt-2 font-medium">Пока нет подтверждённых прибыльных партий</p>
                 <p className="caption mx-auto mt-1 max-w-3xl">
-                  Для расчёта нужны свежий рынок, Alpha-профиль основы и подтверждённый профиль Manufacturing. Проверяются как принадлежащие основе чертежи, так и доступные BPO на рынке; после покупки BPO его нужно синхронизировать, прежде чем закреплять проект.
+                  Нужны свежие рыночные данные, профиль навыков продавца и доступный рецепт. Публичные NPC-площадки из ESI рассчитываются автоматически; для Upwell-структуры вручную задаются доступ, услуги и бонусы.
                 </p>
               </div>
             ) : (
@@ -724,6 +567,32 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                           </Button>
                           {!offer.chainExecutable && <div className="caption mt-1 text-amber-300">{offer.blueprintSource.kind === "market_bpo" && offer.chainPlan.status === "ready" && offer.estimate.status === "ready" ? "План можно закрепить сейчас. Для старта купите BPO вручную, синхронизируйте чертежи и подтвердите покупку по кошельку." : "Полная цепочка не подтверждена, проект нельзя начать."}</div>}
                         </td>
+                      </tr>
+                    ))}
+                    {orderedContractOffers.map((offer) => (
+                      <tr key={offer.id} className="border-b border-border align-top">
+                        <td className="p-3">
+                          <CopyName name={offer.itemName} onCopy={copyName} />
+                          <div className="caption mt-1">BPC-контракт #{offer.contractId} · <CopyName name={offer.blueprintTypeName} onCopy={copyName} /> · {offer.facilityName} · забрать: {offer.pickupLocation}</div>
+                          <div className="caption">{offer.contractTitle} · {offer.blueprintCopies} копий · {offer.bundleRuns} прогонов в наборе · контракт до {timestamp(offer.expiresAt)}</div>
+                          {!offer.blueprintOnly && <div className="caption text-amber-300">Набор смешанный: в затраты включена полная цена контракта {isk(offer.contractPrice)}, прочие предметы не добавлены в доход.</div>}
+                          <details className="mt-2">
+                            <summary className="cursor-pointer text-xs text-muted-foreground">Материалы и расчёт</summary>
+                            <div className="mt-2 space-y-1">
+                              <div className="caption">Цена BPC-контракта целиком: {isk(offer.contractPrice)} · в себестоимости этой партии учтено: {isk(offer.estimate.blueprintAcquisitionCost ?? "0")} · сырьё: {isk(offer.estimate.materialsCost)}.</div>
+                              <div className="caption">Для запуска нужно оплатить {isk(offer.estimate.cashRequired)}; после партии в копиях останется {Math.max(0, offer.bundleRuns - offer.estimate.runs)} прогонов.</div>
+                              {offer.chainPlan.reasons.map((reason) => <div key={reason} className="caption text-amber-300">{reason}</div>)}
+                              {offer.chainPlan.actions.map((action) => <div key={action.id} className="flex justify-between gap-3 text-xs"><span>{action.kind === "manufacturing" ? "Изготовить" : "Купить"} <CopyName name={action.typeName ?? `Type ${action.typeId}`} onCopy={copyName} /> · {action.kind === "manufacturing" ? `${action.runs} прог.` : `${action.quantity.toLocaleString("ru-RU")} шт.`}{action.facilityName ? ` · ${action.facilityName}` : ""}</span><span>{isk(action.cost)}</span></div>)}
+                              {offer.estimate.warnings.map((warning) => <div key={warning} className="caption text-amber-300">{warning}</div>)}
+                              <div className="caption">Рынок проверен {timestamp(offer.observedAt)} · контракт проверен {timestamp(offer.contractObservedAt)} · {offer.includedItemCount} позиций в контракте.</div>
+                            </div>
+                          </details>
+                        </td>
+                        <td className="p-3 text-right tabular-nums">{offer.runs} прогонов<div className="caption">{offer.estimate.outputQuantity.toLocaleString("ru-RU")} шт. крафта</div></td>
+                        <td className="p-3 text-right tabular-nums">{isk(offer.estimate.totalCost)}<div className="caption mt-1">Контракт целиком: {isk(offer.contractPrice)}</div><div className="caption">Доля цены чертежа: {isk(offer.estimate.blueprintAcquisitionCost ?? "0")}</div><div className="caption">К оплате: {isk(offer.estimate.cashRequired)}</div></td>
+                        <td className="p-3 text-right tabular-nums"><span className="text-emerald-300">{isk(offer.estimate.firstCycleProfit.immediate)}</span><div className="caption mt-1">ROI {offer.estimate.firstCycleRoi.immediate === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.immediate) * 100).toFixed(1)}%`}</div></td>
+                        <td className="p-3 text-right tabular-nums"><span className="text-emerald-300">{isk(offer.estimate.firstCycleProfit.sellOrder)}</span><div className="caption mt-1">Продажа по {isk(offer.estimate.sellOrder.unitPrice)} / шт.</div><div className="caption">ROI {offer.estimate.firstCycleRoi.sellOrder === null ? "—" : `${(Number(offer.estimate.firstCycleRoi.sellOrder) * 100).toFixed(1)}%`}</div></td>
+                        <td className="p-3"><span className="text-sky-300">Публичный BPC-контракт</span><div className="caption mt-1">{timestamp(offer.contractObservedAt)}</div><MarketSignalView signal={offer.marketSignal} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -1026,11 +895,11 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 <div className="caption">Сохранённые профили</div>
                 {production.facilityProfiles.map((facility) => (
                   <div key={facility.id} className="flex flex-wrap justify-between gap-2 text-sm">
-                    <span>{facility.name} · {facility.services.join(", ") || "услуги не подтверждены"} · {state.systemNames[facility.systemId] ?? facility.systemId} · ID {facility.id}</span>
+                    <span>{facility.name} · {facility.kind === "npc_station" && facility.profileSource === "esi" ? "Manufacturing · публичная NPC-площадка" : facility.services.join(", ") || "услуги не подтверждены"} · {state.systemNames[facility.systemId] ?? facility.systemId} · ID {facility.id}</span>
                     <span className="caption">
-                      {facility.accessStatus === "confirmed" ? "доступ подтверждён" : facility.accessStatus === "unavailable" ? "доступ недоступен" : "доступ не подтверждён"}
+                      {facility.kind === "npc_station" && facility.profileSource === "esi" ? "публичный доступ · без входа в игру" : facility.accessStatus === "confirmed" ? "доступ подтверждён" : facility.accessStatus === "unavailable" ? "доступ недоступен" : "доступ не подтверждён"}
                       {facility.profileSource === "manual" ? " · ручное добавление/подтверждение" : " · обнаружено через ESI"}
-                      {facility.taxRate ? ` · tax ${(Number(facility.taxRate) * 100).toFixed(2)}%` : " · tax неизвестен"}
+                      {facility.taxRate ? ` · tax ${(Number(facility.taxRate) * 100).toFixed(2)}%` : facility.kind === "npc_station" && facility.profileSource === "esi" ? " · NPC tax 0,25%" : " · tax неизвестен"}
                       {facility.reprocessingYieldPercent ? ` · reprocess ${(Number(facility.reprocessingYieldPercent) * 100).toFixed(2)}%` : ""}
                       {facility.reprocessingTaxRate ? ` · reprocess tax ${(Number(facility.reprocessingTaxRate) * 100).toFixed(2)}%` : " · reprocess tax неизвестен"}
                       {facility.structureProductProfiles.map((product) => <span key={`${facility.id}:${product.outputTypeId}`}> · <CopyName name={product.outputName} onCopy={copyName} />: ME {product.materialBonusPercent}% / TE {product.timeBonusPercent}% / fee {(Number(product.brokerFeeRate) * 100).toFixed(2)}% · {timestamp(product.observedAt)}</span>)}

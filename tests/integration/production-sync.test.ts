@@ -390,6 +390,21 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       systemIndices: 1,
       publicSyncedAt: expect.any(String),
     });
+    let publicNpcOffers = await request(undefined, { kind: "state" });
+    for (let attempt = 0; attempt < 10 && !publicNpcOffers.value?.production.contractScanComplete; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+      publicNpcOffers = await request(undefined, { kind: "state" });
+    }
+    expect(publicNpcOffers.error).toBeUndefined();
+    expect(publicNpcOffers.value?.production.contractOffers.length).toBeGreaterThan(0);
+    expect(publicNpcOffers.value?.production.contractOffers).toContainEqual(expect.objectContaining({
+      contractId: "88003",
+      contractPrice: "1000",
+      estimate: expect.objectContaining({
+        blueprintPurchaseCashCost: "1000.00",
+        blueprintAcquisitionCost: expect.any(String),
+      }),
+    }));
 
     const scopesFromToken = await request({
       kind: "production-scopes",

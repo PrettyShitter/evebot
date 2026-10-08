@@ -611,7 +611,7 @@ function manufacturingOffers(
   );
   const facilityRows = store.sql
     .prepare(
-      "SELECT location_id,name,system_id,facility_kind,services_payload,industry_tax,access_status,observed_at FROM production_facility_profiles WHERE access_status='confirmed'",
+      "SELECT location_id,name,system_id,facility_kind,services_payload,industry_tax,access_status,observed_at FROM production_facility_profiles",
     )
     .all() as {
     location_id: string;
@@ -620,7 +620,7 @@ function manufacturingOffers(
     facility_kind: "npc_station" | "structure";
     services_payload: string;
     industry_tax: string | null;
-    access_status: "confirmed";
+    access_status: "confirmed" | "unknown";
     observed_at: string;
   }[];
   const profiles = facilityRows
@@ -630,7 +630,21 @@ function manufacturingOffers(
       const station: Station | null = knownStation ?? (row.facility_kind === "structure" && system
         ? { id: row.location_id, name: row.name, systemId: row.system_id, regionId: system.regionId, ownerId: "", factionId: null }
         : null);
-      return { row, station };
+      // A station returned by ESI's public industry-facilities endpoint is a
+      // public NPC industry facility. Use the documented NPC station tax and
+      // allow manufacturing quotes without asking the player to prove public
+      // station access in the game client. Upwell structures still require a
+      // manually confirmed profile because ESI does not expose ACLs/services
+      // or structure bonuses.
+      const effectiveRow = row.facility_kind === "npc_station" && knownStation
+        ? {
+            ...row,
+            services_payload: JSON.stringify(["manufacturing"]),
+            industry_tax: row.industry_tax ?? "0.0025",
+            access_status: "confirmed" as const,
+          }
+        : row;
+      return { row: effectiveRow, station };
     })
     .filter((x): x is typeof x & { station: Station } => !!x.station)
     .filter((x) => hubSystems.has(x.station.systemId))

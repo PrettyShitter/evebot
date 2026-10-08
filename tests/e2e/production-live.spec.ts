@@ -44,18 +44,10 @@ test("local production tab loads live public ESI data without GitHub or SSO", as
     await expect(facilityMetric).toContainText(/[1-9][\d,]*/);
     const indexMetric = page.getByText("Индексы системы и активности").locator("..");
     await expect(indexMetric).toContainText(/[1-9][\d,]*/);
-    const contractsPanel = page.locator('[aria-label="Публичные контракты с копиями чертежей"]');
-    await expect(contractsPanel).toBeVisible();
-    await expect(contractsPanel.getByText(/проверено/)).toBeVisible();
-    await expect(contractsPanel).not.toContainText("ESI не дал полный список контрактов");
-    const expandContracts = contractsPanel.getByRole("button", { name: /Показать все контракты/ });
-    if (await expandContracts.count()) {
-      await expect(contractsPanel.locator("article")).toHaveCount(5);
-      await expandContracts.click();
-      expect(await contractsPanel.locator("article").count()).toBeGreaterThan(5);
-      await contractsPanel.getByRole("button", { name: "Свернуть список контрактов" }).click();
-      await expect(contractsPanel.locator("article")).toHaveCount(5);
-    }
+    await expect(page.locator('[aria-label="Публичные контракты с копиями чертежей"]')).toHaveCount(0);
+    const craftOffers = page.locator('[aria-label="Производственные предложения"]');
+    await expect(craftOffers).toBeVisible();
+    await expect(craftOffers.getByRole("heading", { name: "Выгодные предложения крафта" })).toBeVisible();
     await expect(page.getByText("Баланс основы · без торгового haircut")).toBeVisible();
     await expect(page.getByText(/CCP от 4 февраля 2026/)).toBeVisible();
     await page.getByLabel("Фильтр вида производства").selectOption("reprocessing");
