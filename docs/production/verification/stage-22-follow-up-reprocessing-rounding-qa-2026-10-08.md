@@ -1,6 +1,6 @@
 # Stage 22 follow-up — SDE reprocessing output rounding
 
-Date: 2026-10-08 (Asia/Ho_Chi_Minh). Validated from the working tree based on `efb6231`.
+Date: 2026-10-08 (Asia/Ho_Chi_Minh). Validated from commits `80e065f` and `e64cf07`.
 
 ## Change
 
@@ -14,7 +14,7 @@ Date: 2026-10-08 (Asia/Ho_Chi_Minh). Validated from the working tree based on `e
 | Check | Result |
 |---|---|
 | Regression test before the fix | FAIL as expected: a 1.5-unit ore yield was floored to 1. |
-| `pnpm verify:all all` | PASS: ESLint, TypeScript, 107 integration tests, 38 unit tests, build, and 4 regular desktop E2E tests. Three opt-in tests (performance, live public ESI, packaged app) are skipped by this command. |
+| `pnpm verify:all all` | PASS: ESLint, TypeScript, 108 unit tests, 38 integration tests, build, and 4 regular desktop E2E tests. Three opt-in tests (performance, live public ESI, packaged app) are skipped by this command. |
 | Rounding unit and SDE extraction tests | PASS: covers ceiling, nearest integer including a `.5` tie, floor, known ice resources outside the Ice group, and unknown categories staying in review. |
 | `pnpm test:e2e:live` | PASS: non-demo Electron reads current public ESI without GitHub updater or SSO (13.6 s). |
 | Current-tree macOS arm64 app bundle | PASS: `pnpm build && pnpm exec electron-builder --mac dir --arm64 --publish never`; local ad-hoc signature, no notarization. |
