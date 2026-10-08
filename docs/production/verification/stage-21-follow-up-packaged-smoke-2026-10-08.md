@@ -18,7 +18,7 @@ The smoke test now schedules graceful `app.quit()` on the next event-loop turn, 
 | `node scripts/packaged-smoke.mjs` after the change, local macOS arm64 package | PASS; tray hide/show, graceful quit, restart, saved settings |
 | `pnpm verify:all` after the change | PASS; lint, typecheck, 106 integration, 38 unit, 4 E2E; 3 dedicated live/performance/package tests are intentionally separate |
 | `pnpm test:e2e:live` on current source | PASS; public ESI, non-DEMO Electron, isolated profile, 16.1 s |
-| GitHub Actions retry after this change | Pending |
+| GitHub Actions retry `37719864681` on `d0cf772` | PASS on macOS and Windows: full verification, platform package builds, and packaged smoke tests |
 
 ## Remaining acceptance gate
 
