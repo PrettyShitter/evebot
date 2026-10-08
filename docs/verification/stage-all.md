@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-08T01:10:09.569Z
+UTC: 2026-10-08T01:17:15.164Z
 
-Commit: 17f1bbe7a22e7c103ae345871dbd2c5febdf641d; проверяется рабочее дерево.
+Commit: 6bdcbe159c7350a63d32fe6a1998bc10d4a69d2e; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -33,8 +33,8 @@ Exit code: 0; PASS
 
  Test Files  21 passed (21)
       Tests  105 passed (105)
-   Start at  08:10:13
-   Duration  360ms (transform 43%, import 39%, tests 14%, worker 3%)
+   Start at  08:17:18
+   Duration  417ms (transform 46%, import 36%, tests 14%, worker 4%)
 
 $ vitest run tests/unit
 
@@ -51,8 +51,8 @@ Exit code: 0; PASS
 
  Test Files  13 passed (13)
       Tests  38 passed (38)
-   Start at  08:10:13
-   Duration  2.74s (tests 56%, import 37%, transform 7%)
+   Start at  08:17:19
+   Duration  3.28s (import 50%, tests 45%, transform 5%)
 
 $ vitest run tests/integration
 
@@ -69,10 +69,10 @@ transforming...
 rendering chunks...
 computing gzip size...
 dist/renderer/index.html                   0.61 kB │ gzip:   0.37 kB
-dist/renderer/assets/index-981pklpe.css   28.22 kB │ gzip:   6.29 kB
-dist/renderer/assets/index-BdbJ_TwG.js   520.98 kB │ gzip: 156.95 kB
+dist/renderer/assets/index-DuqkVmV6.css   28.28 kB │ gzip:   6.32 kB
+dist/renderer/assets/index-B0VbsMZb.js   521.02 kB │ gzip: 156.98 kB
 
-✓ built in 144ms
+✓ built in 150ms
 $ node scripts/build.mjs
 [plugin builtin:vite-reporter]
 (!) Some chunks are larger than 500 kB after minification. Consider:
@@ -90,18 +90,18 @@ Exit code: 0; PASS
 
 Running 7 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (1.6s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (979ms)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (1.4s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (912ms)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/production-contract-confirmation.spec.ts:7:1 › unknown public BPC attributes can be confirmed in the desktop UI (963ms)
+  ✓  4 tests/e2e/production-contract-confirmation.spec.ts:7:1 › unknown public BPC attributes can be confirmed in the desktop UI (970ms)
   -  5 tests/e2e/production-live.spec.ts:6:1 › local production tab loads live public ESI data without GitHub or SSO
   -  6 tests/e2e/production-packaged.spec.ts:6:1 › packaged macOS app starts non-demo and reads live public ESI without GitHub
-  ✓  7 tests/e2e/shell.spec.ts:5:1 › shell: four tabs, production data panel, restricted preload and settings survive restart (1.3s)
+  ✓  7 tests/e2e/shell.spec.ts:5:1 › shell: four tabs, production data panel, restricted preload and settings survive restart (1.2s)
 
   3 skipped
-  4 passed (5.5s)
+  4 passed (5.2s)
 $ playwright test
-(node:87824) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:94749) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```

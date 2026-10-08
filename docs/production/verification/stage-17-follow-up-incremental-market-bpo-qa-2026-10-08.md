@@ -18,6 +18,7 @@ Date: 2026-10-08 (Asia/Ho_Chi_Minh). A saved regional snapshot exposed a startup
 | `pnpm verify:all` | PASS — lint, typecheck, 21 integration files / 105 tests, 13 unit files / 38 tests, build, and 4 desktop E2E tests. Saved-market, live-ESI, and packaged E2E are opt-in and run separately. |
 | `pnpm test:e2e:live` | PASS — isolated non-DEMO Electron app against public ESI (13.2 s). |
 | macOS arm64 `electron-builder --mac dir --publish never` + `pnpm test:e2e:packaged:mac` | PASS — packaged non-DEMO app against public ESI (20.9 s); ad-hoc signed, not notarized. |
+| `node scripts/packaged-smoke.mjs` on the ad-hoc macOS package | PASS — signature integrity, worker/SQLite/migrations, settings persistence, tray hide/show and restart. The GitHub PR runner exposed that electron-builder skips signing by default in PR builds; CI now sets `CSC_FOR_PULL_REQUEST=true` so its signature check tests the same ad-hoc-signed package. |
 
 The isolated production UI capture is [saved here](./screenshots/stage-17-production-non-demo.png). It shows the regular non-DEMO portfolio surface and calculated offers; its wallet and character data are synthetic test fixtures.
 
