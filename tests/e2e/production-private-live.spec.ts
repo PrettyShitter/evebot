@@ -34,6 +34,9 @@ test("authorized private production data syncs in non-demo Electron", async () =
     await expect(
       page.getByText(/Навыки, чертежи, assets, задания и контракты:/),
     ).not.toContainText("ещё не обновлялись");
+    await expect(
+      page.getByText(/Alpha:\s*[1-9]\d*\s+доступных навыков/),
+    ).toBeVisible();
   } finally {
     await app.close();
   }
