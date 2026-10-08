@@ -19,6 +19,7 @@ Date: 2026-10-08 (Asia/Ho_Chi_Minh).
 | `pnpm test:e2e:live` | PASS — non-DEMO dev Electron fetched public ESI and completed the isolated manual structure candidate flow (19.3 s). |
 | macOS arm64 package + `pnpm test:e2e:packaged:mac` | PASS — rebuilt package fetched public ESI (18.4 s). |
 | `node scripts/packaged-smoke.mjs` | PASS — app signature integrity, launch, worker/SQLite/migrations, settings, tray hide/show and restart persistence. Ad-hoc signature only; not Apple notarization. |
+| Follow-up verification on `ec13904` | PASS — `pnpm test:e2e:live` fetched public ESI in 13.4 s; `pnpm test:e2e:packaged:mac` fetched public ESI from the packaged build in 19.3 s; packaged smoke PASS; GitHub Actions for macOS and Windows completed packaging and smoke successfully. |
 
 ## Remaining acceptance limits
 
