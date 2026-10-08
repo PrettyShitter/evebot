@@ -17,7 +17,11 @@ import { SignedMacUpdater } from "./signed-mac-updater";
 import { waitForUpdateIdle } from "./update-readiness";
 import { join, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { requestSchema, type AppState } from "../shared/contracts/app";
+import {
+  requestSchema,
+  type AppState,
+  PRODUCTION_SCOPES,
+} from "../shared/contracts/app";
 import { Store, restoreBackup } from "../db/store";
 import { SecureVault } from "./vault";
 import { authorize } from "./authorization";
@@ -25,11 +29,18 @@ import { SsoClient, TokenManager } from "../engine/auth/tokens";
 import { EsiClient } from "../engine/esi/client";
 import { fetchWallet } from "../engine/portfolio/sync";
 import { fetchProfile } from "../engine/portfolio/profile";
+import {
+  fetchOwnProductionData,
+  fetchPublicProductionData,
+  fetchStructureMarkets,
+} from "../engine/production/esi";
 let updates: UpdateController | undefined;
 let installingUpdate = false;
 let quitting = false;
 let tray: Tray | undefined;
 let syncing = false;
+let productionSyncing = false;
+let productionSyncError: string | null = null;
 let walletError = "";
 let window: BrowserWindow;
 let worker: Worker;
@@ -52,6 +63,7 @@ function startWorker() {
       resources: join(__dirname, "../../resources"),
       demo,
       offline: process.env.EVE_OFFLINE === "1",
+      devBuild: !app.isPackaged,
     },
   });
   worker.on("message", (m: { id: string; value: AppState; error?: string }) => {
@@ -60,7 +72,16 @@ function startWorker() {
       clearTimeout(p.timer);
       pending.delete(m.id);
       if (m.error) p.reject(new Error(m.error));
-      else p.resolve({ ...m.value, update: updates?.view });
+      else
+        p.resolve({
+          ...m.value,
+          production: {
+            ...m.value.production,
+            syncing: productionSyncing,
+            syncError: productionSyncError,
+          },
+          update: updates?.view,
+        });
     }
   });
   worker.on("error", () => {
@@ -202,11 +223,13 @@ app.whenReady().then(async () => {
         tokens = new TokenManager(vault, (t) => sso.refresh(t));
       }
       const wallets = [];
+      const scopes: Record<string, string[]> = {};
       for (const c of s.characters) {
         try {
-          wallets.push(
-            await fetchWallet(esi, c.id, await tokens.access(c.id), c.isSeller),
-          );
+          const accessToken = await tokens.access(c.id);
+          const tokenRecord = await vault.read(c.id);
+          scopes[c.id] = tokenRecord?.scopes ?? [];
+          wallets.push(await fetchWallet(esi, c.id, accessToken, c.isSeller));
         } catch (error) {
           if (
             error instanceof Error &&
@@ -225,7 +248,7 @@ app.whenReady().then(async () => {
       const result = await requestEngine(
         req.kind === "deal.reconcile" ? req : { kind: "state" },
         undefined,
-        { kind: "wallets", wallets, profile },
+        { kind: "wallets", wallets, profile, scopes },
       );
       walletError = "";
       return result;
@@ -234,6 +257,95 @@ app.whenReady().then(async () => {
       throw e;
     } finally {
       syncing = false;
+    }
+  }
+  async function syncProduction() {
+    if (demo) throw Error("Производство недоступно в DEMO");
+    if (productionSyncing || syncing)
+      throw Error("Дождитесь завершения текущей сверки ESI");
+    productionSyncing = true;
+    const syncWorker = worker;
+    try {
+      const current = await requestEngine({ kind: "state" });
+      const mainCharacter = current.characters.find((character) => character.isSeller);
+      const staticData = JSON.parse(readFileSync(join(__dirname, "../../resources/static-data.json"), "utf8")) as {
+        stations: { id: string; systemId: string; regionId: string }[];
+      };
+      const hubSystems = new Set(["30000142", "30000144"]);
+      const hubStations = staticData.stations.filter((station) => hubSystems.has(station.systemId));
+      const publicData = await fetchPublicProductionData(
+        esi,
+        hubSystems,
+        new Set(hubStations.map((station) => station.id)),
+        new Set(hubStations.map((station) => station.regionId)),
+      );
+      if (syncWorker !== worker)
+        throw Error("Портфель изменился во время синхронизации");
+      await requestEngine(
+        { kind: "state" },
+        undefined,
+        { kind: "public-production", publicData },
+      );
+      productionSyncError = null;
+      if (!mainCharacter) return requestEngine({ kind: "state" });
+      const record = await vault.read(mainCharacter.id);
+      if (!record) return requestEngine({ kind: "state" });
+      await requestEngine(
+        { kind: "state" },
+        undefined,
+        {
+          kind: "production-scopes",
+          characterId: mainCharacter.id,
+          scopes: record.scopes,
+        },
+      );
+      const missing = PRODUCTION_SCOPES.filter((scope) => !record.scopes.includes(scope));
+      if (missing.length) return requestEngine({ kind: "state" });
+      if (!tokens || tokenClientId !== current.settings.clientId) {
+        tokenClientId = current.settings.clientId;
+        const sso = new SsoClient(tokenClientId);
+        tokens = new TokenManager(vault, (token) => sso.refresh(token));
+      }
+      const accessToken = await tokens.access(mainCharacter.id);
+      const structureProfiles = current.production.facilityProfiles
+        .filter((facility) => facility.kind === "structure" && facility.accessStatus === "confirmed")
+        .filter((facility) => hubSystems.has(facility.systemId))
+        .map((facility) => ({ id: facility.id, systemId: facility.systemId }));
+      const hasStructureMarketScope = record.scopes.includes("esi-markets.structure_markets.v1");
+      const [profile, own] = await Promise.all([
+        fetchProfile(esi, mainCharacter.id, accessToken),
+        fetchOwnProductionData(esi, mainCharacter.id, accessToken),
+      ]);
+      const structureMarkets = hasStructureMarketScope
+        ? await fetchStructureMarkets(esi, accessToken, mainCharacter.id, structureProfiles)
+        : structureProfiles.map((facility) => ({
+            structureId: facility.id,
+            systemId: facility.systemId,
+            state: "missing_scope" as const,
+            pages: 0,
+            observedAt: new Date().toISOString(),
+            message: "Не выдан scope esi-markets.structure_markets.v1",
+            orders: [],
+          }));
+      if (syncWorker !== worker)
+        throw Error("Портфель изменился во время синхронизации");
+      return requestEngine(
+        { kind: "state" },
+        undefined,
+        {
+          kind: "production-data",
+          characterId: mainCharacter.id,
+          profile,
+          own,
+          publicData,
+          structureMarkets,
+        },
+      );
+    } catch (error) {
+      productionSyncError = error instanceof Error ? error.message : "Ошибка ESI";
+      throw error;
+    } finally {
+      productionSyncing = false;
     }
   }
   window = new BrowserWindow({
@@ -320,8 +432,10 @@ app.whenReady().then(async () => {
         id: record.characterId,
         name: record.name,
         seller,
+        scopes: record.scopes,
       });
     }
+    if (req.kind === "production.sync") return syncProduction();
     if (req.kind === "character.disconnect") {
       if (syncing)
         throw Error("Дождитесь завершения сверки перед отключением персонажа");
@@ -434,12 +548,21 @@ app.whenReady().then(async () => {
   await window.loadURL(entry);
   const initialState = await requestEngine({ kind: "state" });
   macUpdates?.acknowledgeHealthy(process.argv);
-  if (
-    !demo &&
-    initialState.characters.length === 3 &&
-    initialState.characters.every((c) => c.status !== "revoked")
-  )
-    void syncWallets({ kind: "wallet.sync" }).catch(() => {});
+  if (!demo && process.env.EVE_BENCHMARK !== "1") {
+    const wallets =
+      initialState.characters.length === 3 &&
+      initialState.characters.every((c) => c.status !== "revoked")
+        ? syncWallets({ kind: "wallet.sync" }).catch(() => undefined)
+        : Promise.resolve(undefined);
+    // Public facilities, indices, prices, and contract listings do not require
+    // a connected character. Keep them available even when wallet auth expires.
+    void wallets.then(() => syncProduction()).catch(() => {});
+    const productionRefresh = setInterval(
+      () => void syncProduction().catch(() => {}),
+      30 * 60 * 1000,
+    );
+    productionRefresh.unref();
+  }
 });
 app.on("window-all-closed", () => {
   if (quitting) app.quit();

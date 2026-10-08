@@ -65,20 +65,31 @@ try {
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].close(),
   );
+  console.log("Window close requested; checking tray behavior");
   if (
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0].isVisible(),
     )
   )
     throw Error("Close did not hide to tray");
+  console.log("Window is hidden; showing it again");
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].show(),
   );
+  console.log("Window shown; requesting app quit");
   checks.push("hide to tray + show");
   // The app intentionally hides BrowserWindow on close, so ElectronApplication.close()
   // alone waits forever for a process that remains alive in the tray.
-  await app.evaluate(({ app }) => app.quit());
+  // Resolve the Electron main-process evaluation before app.quit closes its
+  // Playwright transport. Calling quit directly inside evaluate can leave the
+  // smoke test waiting forever on macOS runners.
+  await app.evaluate(({ app }) => {
+    setTimeout(() => app.quit(), 0);
+    return true;
+  });
+  console.log("Graceful app quit scheduled; waiting for process close");
   await app.close();
+  console.log("First packaged process closed; launching restart");
   app = await launch();
   console.log("Restarted packaged app; checking saved settings");
   page = await app.firstWindow();

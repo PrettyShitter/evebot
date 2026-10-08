@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { Store } from "../../db/store";
 import { resolve } from "node:path";
 import { EsiClient } from "../../engine/esi/client";
-import { syncRegion, latestOrders } from "../../engine/market/snapshots";
+import { syncRegion, latestOrders, latestProductionOrders } from "../../engine/market/snapshots";
 import { Scheduler } from "../../engine/esi/scheduler";
 import { summarize } from "../../engine/history/history";
 import { shouldStartMarketCalculation } from "../../engine/market/calculation-gate";
@@ -112,6 +112,8 @@ it("omits excluded commodity orders from new snapshots", async () => {
     );
     expect(result.count).toBe(0);
     expect(latestOrders(s, ["1"]).orders).toEqual([]);
+    expect(latestProductionOrders(s, ["1"]).orders).toHaveLength(1);
+    expect(latestProductionOrders(s, ["1"], new Set(["60003761"])).orders).toEqual([]);
   } finally {
     s.close();
   }

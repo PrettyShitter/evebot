@@ -9,13 +9,14 @@ export class Portfolio {
   characters(): CharacterView[] {
     return (
       this.store.sql
-        .prepare("SELECT * FROM characters ORDER BY is_seller DESC,id")
+      .prepare("SELECT * FROM characters ORDER BY is_seller DESC,id")
         .all() as {
         id: string;
         name: string;
         status: string;
         is_seller: number;
         balance: string | null;
+        scopes: string;
       }[]
     ).map((c) => ({
       id: c.id,
@@ -23,9 +24,10 @@ export class Portfolio {
       status: c.status,
       isSeller: !!c.is_seller,
       balance: c.balance,
+      scopes: JSON.parse(c.scopes || "[]") as string[],
     }));
   }
-  connect(id: string, name: string, seller: boolean) {
+  connect(id: string, name: string, seller: boolean, scopes: string[] = []) {
     this.store.sql.transaction(() => {
       const exists = this.store.sql
         .prepare("SELECT id FROM characters WHERE id=?")
@@ -36,9 +38,9 @@ export class Portfolio {
         this.store.sql.prepare("UPDATE characters SET is_seller=0").run();
       this.store.sql
         .prepare(
-          "INSERT INTO characters(id,name,status,is_seller) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,status=excluded.status,is_seller=excluded.is_seller",
+          "INSERT INTO characters(id,name,status,is_seller,scopes) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,status=excluded.status,is_seller=excluded.is_seller,scopes=excluded.scopes",
         )
-        .run(id, name, "connected", seller ? 1 : 0);
+        .run(id, name, "connected", seller ? 1 : 0, JSON.stringify(scopes));
     })();
   }
   disconnect(id: string) {

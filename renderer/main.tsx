@@ -8,6 +8,7 @@ import {
   Radio,
   Database,
   ChevronRight,
+  Factory,
 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -29,6 +30,7 @@ import "./styles.css";
 import { MarketView } from "./MarketView";
 import { DealsView } from "./DealsView";
 import { UpdatePanel } from "./UpdatePanel";
+import { ProductionView } from "./ProductionView";
 import { money } from "./lib/format";
 declare global {
   interface Window {
@@ -215,6 +217,10 @@ function App() {
             <History size={15} />
             Закрытые сделки
           </TabsTrigger>
+          <TabsTrigger value="production">
+            <Factory size={15} />
+            Производство
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="market">
           {state.opportunities.length || state.characters.length === 3 ? (
@@ -244,6 +250,17 @@ function App() {
         </TabsContent>
         <TabsContent value="closed">
           <DealsView state={state} request={request} busy={busy} closed />
+        </TabsContent>
+        <TabsContent value="production">
+          <ProductionView
+            state={state}
+            request={request}
+            busy={busy}
+            openSettings={() => {
+              setDraft(state.settings);
+              setSettingsOpen(true);
+            }}
+          />
         </TabsContent>
       </Tabs>
       <footer className="footer">

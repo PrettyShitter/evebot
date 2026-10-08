@@ -1,9 +1,24 @@
 import { z } from "zod";
 import { parse } from "lossless-json";
-export const id = z.string().regex(/^[1-9]\d*$/);
-export const decimal = z.string().regex(/^-?\d+(\.\d+)?$/);
+function exactScalar(value: unknown): unknown {
+  if (value && typeof value === "object" && "isLosslessNumber" in value &&
+      value.isLosslessNumber === true && "value" in value && typeof value.value === "string")
+    return value.value;
+  return value;
+}
+export const id = z.preprocess((value) => {
+  const exact = exactScalar(value);
+  return typeof exact === "number" && Number.isSafeInteger(exact) ? String(exact) : exact;
+}, z.string().regex(/^[1-9]\d*$/));
+export const decimal = z.preprocess((value) => {
+  const exact = exactScalar(value);
+  return typeof exact === "number" && Number.isFinite(exact) ? String(exact) : exact;
+}, z.string().regex(/^-?\d+(\.\d+)?$/));
 const integer = z.preprocess(
-  (v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v),
+  (value) => {
+    const exact = exactScalar(value);
+    return typeof exact === "string" && /^\d+$/.test(exact) ? Number(exact) : exact;
+  },
   z.number().int().safe().nonnegative(),
 );
 export const orderSchema = z.object({

@@ -1,8 +1,143 @@
 {
-  "at": "2026-10-03T09:06:34.743Z",
-  "uiFilterMs": 75,
-  "filterMs": 12.400000005960464,
-  "maxRendererGapMs": 19.799999997019768,
-  "offersBefore": 24,
-  "offersAfter": 0
+  "at": "2026-10-08T04:03:14.016Z",
+  "uiFilterMs": 56.69999998807907,
+  "stateTimings": [
+    {
+      "productionMs": 749.567667,
+      "opportunitiesMs": 2.0694579999999405,
+      "detailMs": 1.4132500000000618,
+      "totalMs": 753.5438330000002,
+      "offerCount": 0,
+      "productionOfferCount": 1
+    },
+    {
+      "productionMs": 0.011000000000194632,
+      "opportunitiesMs": 0.25749999999993634,
+      "detailMs": 3.8347499999999854,
+      "totalMs": 4.168458999999984,
+      "offerCount": 0,
+      "productionOfferCount": 1
+    },
+    {
+      "productionMs": 2181.062083,
+      "opportunitiesMs": 0.28074999999989814,
+      "detailMs": 0.9600829999999405,
+      "totalMs": 2182.727,
+      "offerCount": 9,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.020541999999295513,
+      "opportunitiesMs": 1.9833330000001297,
+      "detailMs": 1.7655000000004293,
+      "totalMs": 3.9454160000004777,
+      "offerCount": 4,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.012458999999580556,
+      "opportunitiesMs": 0.2997080000004644,
+      "detailMs": 1.286457999999584,
+      "totalMs": 1.7565420000000813,
+      "offerCount": 4,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.009541999999783002,
+      "opportunitiesMs": 0.6445410000005722,
+      "detailMs": 1.038249999999607,
+      "totalMs": 1.7692090000000462,
+      "offerCount": 1,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.007375000000138243,
+      "opportunitiesMs": 0.5761249999995925,
+      "detailMs": 1.2065840000004755,
+      "totalMs": 1.8365420000000086,
+      "offerCount": 1,
+      "productionOfferCount": 26
+    }
+  ],
+  "filterMs": 13,
+  "stateMs": 13.300000011920929,
+  "stateJsonBytes": 595238,
+  "maxRendererGapMs": 17.599999964237213,
+  "offersBefore": 4,
+  "offersAfter": 1,
+  "productionOffers": 26,
+  "productionCandidates": [
+    "Rifter",
+    "Capacitor Flux Coil I",
+    "Light Missile Launcher I",
+    "Explosive Coating I",
+    "Shield Flux Coil I",
+    "Rocket Launcher I",
+    "Ultraviolet S",
+    "Gatling Pulse Laser I",
+    "125mm Gatling AutoCannon I",
+    "Plutonium Charge S",
+    "Auto Targeting System I",
+    "Iron Charge M",
+    "Nova Rocket",
+    "Uranium Charge S",
+    "Inferno Rocket",
+    "Infrared S",
+    "Iridium Charge S",
+    "Lead Charge S",
+    "Mjolnir Rocket",
+    "Thorium Charge S",
+    "Tungsten Charge S",
+    "Caldari Shuttle",
+    "Scourge Rocket",
+    "Ship Scanner I",
+    "Iron Charge S",
+    "75mm Gatling Rail I"
+  ],
+  "productionReadiness": {
+    "main": "90000001",
+    "manufacturingRecipes": 4867,
+    "facilityOptions": [
+      "60000361",
+      "60000364",
+      "60000451",
+      "60000463",
+      "60002953",
+      "60002959",
+      "60003055",
+      "60003460",
+      "60003463",
+      "60003466",
+      "60003469",
+      "60003757",
+      "60003760",
+      "60004423",
+      "60015169",
+      "60015260",
+      "60015261",
+      "60015262"
+    ],
+    "facilityProfiles": [
+      {
+        "id": "60003760",
+        "services": [
+          "manufacturing"
+        ],
+        "accessStatus": "confirmed"
+      }
+    ],
+    "blueprints": 4859,
+    "marketBpoCandidatesScanned": 32,
+    "marketBpoCandidatesTotal": 643,
+    "marketBpoScanComplete": false
+  },
+  "fullProductionScan": {
+    "scanned": 643,
+    "total": 643,
+    "complete": true,
+    "contractScanned": 24,
+    "contractTotal": 24,
+    "contractComplete": true,
+    "elapsedMs": 34022
+  }
 }

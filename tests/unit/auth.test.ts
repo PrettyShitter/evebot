@@ -1,11 +1,18 @@
 import { it, expect } from "vitest";
 import {
   pkce,
+  SCOPES,
   TokenManager,
   type TokenRecord,
   type Vault,
 } from "../../engine/auth/tokens";
 import { createHash } from "node:crypto";
+import { PRODUCTION_SCOPES, OPTIONAL_STRUCTURE_SCOPES } from "../../shared/contracts/app";
+it("requests every required production ESI permission only for the main character", () => {
+  expect(SCOPES.seller).toEqual(expect.arrayContaining([...PRODUCTION_SCOPES, ...OPTIONAL_STRUCTURE_SCOPES]));
+  expect(SCOPES.seller).toHaveLength(new Set(SCOPES.seller).size);
+  expect(SCOPES.buyer).toEqual(["esi-wallet.read_character_wallet.v1"]);
+});
 it("PKCE uses cryptographic unique state and S256 of verifier string", () => {
   const a = pkce(),
     b = pkce();
