@@ -1,66 +1,114 @@
 {
-  "at": "2026-10-08T00:52:40.683Z",
-  "uiFilterMs": 54.5,
+  "at": "2026-10-08T01:12:13.037Z",
+  "uiFilterMs": 57.5,
   "stateTimings": [
     {
-      "productionMs": 1842.421084,
-      "opportunitiesMs": 1393.5979159999997,
-      "detailMs": 1.220209000000068,
-      "totalMs": 3237.814209,
-      "offerCount": 8,
+      "productionMs": 588.140542,
+      "opportunitiesMs": 1.8271250000000236,
+      "detailMs": 1.2224999999999682,
+      "totalMs": 591.677833,
+      "offerCount": 0,
       "productionOfferCount": 1
     },
     {
-      "productionMs": 2234.565583,
-      "opportunitiesMs": 0.2845839999999953,
-      "detailMs": 0.9873330000000351,
-      "totalMs": 2235.891833,
-      "offerCount": 8,
-      "productionOfferCount": 2
-    },
-    {
-      "productionMs": 0.017333000000689935,
-      "opportunitiesMs": 1.4766669999999067,
-      "detailMs": 2.3877080000002024,
-      "totalMs": 4.027084000000286,
-      "offerCount": 3,
-      "productionOfferCount": 2
-    },
-    {
-      "productionMs": 0.014167000000270491,
-      "opportunitiesMs": 0.29858299999978044,
-      "detailMs": 1.4274169999998776,
-      "totalMs": 1.9008340000000317,
-      "offerCount": 3,
-      "productionOfferCount": 2
-    },
-    {
-      "productionMs": 0.011792000000241387,
-      "opportunitiesMs": 0.24749999999949068,
-      "detailMs": 1.0228750000005675,
-      "totalMs": 1.3647080000000642,
+      "productionMs": 0.00941699999998491,
+      "opportunitiesMs": 0.26520800000002964,
+      "detailMs": 2.8086250000000064,
+      "totalMs": 3.1714580000000296,
       "offerCount": 0,
-      "productionOfferCount": 2
+      "productionOfferCount": 1
     },
     {
-      "productionMs": 0.010209000000031665,
-      "opportunitiesMs": 1367.560458,
-      "detailMs": 1.1592499999997017,
-      "totalMs": 1368.8051249999999,
+      "productionMs": 0.008000000000038199,
+      "opportunitiesMs": 0.20908299999996416,
+      "detailMs": 1.0876250000000027,
+      "totalMs": 1.3647920000000795,
       "offerCount": 0,
-      "productionOfferCount": 2
+      "productionOfferCount": 1
+    },
+    {
+      "productionMs": 0.01824999999996635,
+      "opportunitiesMs": 0.26891599999999016,
+      "detailMs": 1.1594169999999622,
+      "totalMs": 1.602708000000007,
+      "offerCount": 0,
+      "productionOfferCount": 1
+    },
+    {
+      "productionMs": 230.07012499999973,
+      "opportunitiesMs": 0.23300000000017462,
+      "detailMs": 0.9567079999997077,
+      "totalMs": 231.57200000000012,
+      "offerCount": 9,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.05925000000024738,
+      "opportunitiesMs": 2.290874999999687,
+      "detailMs": 2.202874999999949,
+      "totalMs": 4.8282500000000255,
+      "offerCount": 4,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.012875000000349246,
+      "opportunitiesMs": 0.2957909999995536,
+      "detailMs": 1.289292000000387,
+      "totalMs": 1.7257910000002994,
+      "offerCount": 4,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.011124999999992724,
+      "opportunitiesMs": 0.6792080000000169,
+      "detailMs": 1.07037500000024,
+      "totalMs": 1.8313749999997526,
+      "offerCount": 1,
+      "productionOfferCount": 26
+    },
+    {
+      "productionMs": 0.007583000000067841,
+      "opportunitiesMs": 0.650000000000091,
+      "detailMs": 1.2712079999996604,
+      "totalMs": 1.9886670000000777,
+      "offerCount": 1,
+      "productionOfferCount": 26
     }
   ],
-  "filterMs": 10.699999988079071,
-  "stateMs": 12.600000023841858,
-  "stateJsonBytes": 447850,
-  "maxRendererGapMs": 18.30000001192093,
-  "offersBefore": 3,
-  "offersAfter": 0,
-  "productionOffers": 2,
+  "filterMs": 13,
+  "stateMs": 13.699999988079071,
+  "stateJsonBytes": 582867,
+  "maxRendererGapMs": 18.100000023841858,
+  "offersBefore": 4,
+  "offersAfter": 1,
+  "productionOffers": 26,
   "productionCandidates": [
     "Rifter",
-    "Infrared S"
+    "Capacitor Flux Coil I",
+    "Light Missile Launcher I",
+    "Explosive Coating I",
+    "Shield Flux Coil I",
+    "Rocket Launcher I",
+    "Ultraviolet S",
+    "Gatling Pulse Laser I",
+    "125mm Gatling AutoCannon I",
+    "Plutonium Charge S",
+    "Auto Targeting System I",
+    "Iron Charge M",
+    "Nova Rocket",
+    "Uranium Charge S",
+    "Inferno Rocket",
+    "Infrared S",
+    "Iridium Charge S",
+    "Lead Charge S",
+    "Mjolnir Rocket",
+    "Thorium Charge S",
+    "Tungsten Charge S",
+    "Caldari Shuttle",
+    "Scourge Rocket",
+    "Ship Scanner I",
+    "Iron Charge S",
+    "75mm Gatling Rail I"
   ],
   "productionReadiness": {
     "main": "90000001",
@@ -95,8 +143,8 @@
       }
     ],
     "blueprints": 4859,
-    "marketBpoCandidatesScanned": 1,
-    "marketBpoCandidatesTotal": 40,
+    "marketBpoCandidatesScanned": 32,
+    "marketBpoCandidatesTotal": 644,
     "marketBpoScanComplete": false
   }
 }

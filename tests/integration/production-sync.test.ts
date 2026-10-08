@@ -499,7 +499,6 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
     }
     expect(marketBpoState?.production.marketBpoCandidatesScanned).toBeGreaterThan(0);
     expect(marketBpoState?.production.marketBpoCandidatesTotal).toBeGreaterThan(0);
-    expect(marketBpoState?.production.marketBpoScanCapped).toBe(false);
     expect(marketBpoOffer).toMatchObject({
       blueprintSource: { kind: "market_bpo", purchaseOrderId: "ask-bpo-684", purchasePrice: "200000" },
       chainExecutable: false,

@@ -10,20 +10,19 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Store } from "../../db/store";
-import { seedDemo } from "../../engine/market/demo";
 import { importStatic, type StaticData } from "../../engine/market/static-data";
+import { Portfolio } from "../../engine/portfolio/repository";
 test("stage 9: full saved regional dataset, local filter latency and renderer responsiveness", async () => {
   test.skip(
     process.env.EVE_BENCHMARK !== "1" || !existsSync(".cache/benchmark.sqlite"),
     "Opt-in saved public snapshot, see scripts/benchmark.ts",
   );
   const directory = mkdtempSync(join(tmpdir(), "eve-perf-"));
-  copyFileSync(".cache/benchmark.sqlite", join(directory, "demo.sqlite"));
+  copyFileSync(".cache/benchmark.sqlite", join(directory, "portfolio.sqlite"));
   const store = new Store(
-    join(directory, "demo.sqlite"),
+    join(directory, "portfolio.sqlite"),
     resolve("db/migrations"),
   );
-  seedDemo(store);
   importStatic(
     store,
     JSON.parse(
@@ -37,6 +36,35 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     roiEnabled: false,
   });
   const observedAt = new Date().toISOString();
+  const portfolio = new Portfolio(store);
+  portfolio.connect("90000001", "Benchmark Main", true);
+  portfolio.connect("90000002", "Benchmark Buyer Two", false);
+  portfolio.connect("90000003", "Benchmark Buyer Three", false);
+  portfolio.importWallets(
+    ["600000000", "250000000", "150000000"].map((balance, index) => ({
+      id: String(90000001 + index),
+      balance,
+      transactions: [],
+      journal: [],
+      modified: observedAt,
+      expires: 0,
+    })),
+    [],
+    observedAt,
+  );
+  store.sql.prepare(
+    "INSERT INTO sync_cursors(key,value) VALUES ('seller-profile',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+  ).run(JSON.stringify({
+    race: "Gallente",
+    skills: ["16622", "3446", "16597"].map((skill_id) => ({
+      skill_id,
+      trained_skill_level: 5,
+      active_skill_level: 5,
+    })),
+    standings: [],
+    queue: [],
+    at: observedAt,
+  }));
   const snapshot = store.sql.prepare(
     "SELECT id FROM market_snapshot_runs WHERE region_id='10000002' AND status='complete' AND id NOT LIKE 'demo-%' ORDER BY completed_at DESC LIMIT 1",
   ).get() as { id: string } | undefined;
@@ -66,16 +94,16 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
   for (const [typeId, price] of adjustedPrices) adjustedInsert.run(typeId, price, observedAt);
   const orderInsert = store.sql.prepare("INSERT INTO market_orders(generation,id,type_id,location_id,payload) VALUES (?,?,?,?,?)");
   const benchmarkOrders = [
-    { typeId: "587", buy: true, price: "750000", quantity: 100 },
-    { typeId: "587", buy: false, price: "500000", quantity: 100 },
-    ...[["34", "1"], ["35", "2"], ["36", "3"], ["37", "4"]].map(([typeId, price]) => ({ typeId, buy: false, price, quantity: 10_000_000 })),
+    { typeId: "587", buy: true, price: "750000", quantity: 100, locationId: "60003757" },
+    { typeId: "587", buy: false, price: "500000", quantity: 100, locationId: "60003760" },
+    ...[["34", "1"], ["35", "2"], ["36", "3"], ["37", "4"]].map(([typeId, price]) => ({ typeId, buy: false, price, quantity: 10_000_000, locationId: "60003760" })),
   ];
   for (const [index, order] of benchmarkOrders.entries()) {
     const orderId = `benchmark-production-${index}`;
-    orderInsert.run(snapshot.id, orderId, order.typeId, "60003760", JSON.stringify({
+    orderInsert.run(snapshot.id, orderId, order.typeId, order.locationId, JSON.stringify({
       order_id: orderId,
       type_id: order.typeId,
-      location_id: "60003760",
+      location_id: order.locationId,
       system_id: "30000142",
       price: order.price,
       is_buy_order: order.buy,
@@ -97,12 +125,14 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     env: {
       ...process.env,
       EVE_OFFLINE: "1",
-      EVE_DEMO: "1",
+      EVE_DEMO: "0",
       EVE_USER_DATA: directory,
     },
   });
   try {
     const page = await app.firstWindow();
+    await expect(page.getByText("Локальный портфель")).toBeVisible();
+    await expect(page.getByText("DEMO", { exact: true })).toHaveCount(0);
     // A visible table header must not count as a market result.
     await expect(page.locator("button.market-row.data-row").first()).toBeVisible({
       timeout: 25000,
@@ -196,13 +226,18 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     expect(metrics.offersAfter).toBeGreaterThanOrEqual(0);
     expect(metrics.productionOffers).toBeGreaterThan(0);
     expect(metrics.productionCandidates).toContain("Rifter");
+    expect(metrics.productionReadiness.marketBpoCandidatesTotal).toBeGreaterThan(40);
+    expect(metrics.productionReadiness.marketBpoCandidatesScanned).toBeGreaterThan(0);
+    expect(metrics.productionReadiness.marketBpoScanComplete).toBe(false);
     expect(uiFilterMs).toBeLessThanOrEqual(300);
     expect(metrics.filterMs).toBeLessThanOrEqual(300);
     expect(metrics.maxRendererGapMs).toBeLessThan(1000);
     await page.screenshot({ path: "test-results/real-regional-market.png" });
     await page.getByRole("tab", { name: "Производство" }).click();
     await expect(page.locator('[aria-label="Производственные предложения"]').getByText("Rifter").first()).toBeVisible();
-    await page.screenshot({ path: "test-results/production-large-market-benchmark.png", fullPage: true });
+    await expect(page.getByRole("status").filter({ hasText: "В фоне анализируются рыночные BPO" })).toBeVisible();
+    await page.locator('[aria-label="Производственные предложения"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: "test-results/production-large-market-benchmark.png" });
   } finally {
     await app.close();
     rmSync(directory, { recursive: true, force: true });

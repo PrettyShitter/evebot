@@ -383,7 +383,6 @@ export interface AppState {
     marketBpoCandidatesScanned: number;
     marketBpoCandidatesTotal: number;
     marketBpoScanComplete: boolean;
-    marketBpoScanCapped: boolean;
     contractOffers: {
       id: string;
       contractId: string;

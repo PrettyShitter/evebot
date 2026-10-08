@@ -542,7 +542,7 @@ function selected(items: { id: string; quantity: number }[]) {
   });
 }
 let productionOfferCacheKey = "";
-let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "marketBpoScanCapped"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, marketBpoScanCapped: false };
+let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true };
 let productionMarketBpoProgress = 0;
 let productionMarketBpoTotal = 0;
 let productionMarketBpoScanKey = "";
@@ -597,8 +597,8 @@ function productionCapital(main: AppState["characters"][number] | undefined) {
 function manufacturingOffers(
   productionStatic: StaticData,
   main: AppState["characters"][number] | undefined,
-): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "marketBpoScanCapped"> {
-  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, marketBpoScanCapped: false };
+): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete"> {
+  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true };
   if (!main || !market.data) return empty;
   const hubSystems = new Set(["30000142", "30000144"]);
   const hubStations = productionStatic.stations.filter((station) =>
@@ -980,20 +980,16 @@ function manufacturingOffers(
     }
   }
   marketBpoListings.sort((left, right) => D(left.order.price).comparedTo(right.order.price));
-  // Score the cheapest acquisition sources first. A regional snapshot can
-  // contain thousands of sell orders for blueprint types; evaluating every
-  // candidate against every material-depth breakpoint made initial state
-  // computation take minutes. Keep broad recipe discovery, but bound expensive
-  // quote optimization and expose the cap in the UI.
-  const marketBpoEvaluationLimit = 40;
-  const marketBpoScanCapped = marketBpoListings.length > marketBpoEvaluationLimit;
-  const boundedMarketBpos = marketBpoListings.slice(0, marketBpoEvaluationLimit);
+  // Evaluate every feasible market BPO. Progress is incremental so the initial
+  // app state can show owned-blueprint offers before this full scan completes.
+  const boundedMarketBpos = marketBpoListings;
   productionMarketBpoTotal = boundedMarketBpos.length;
-  // Return the owned-blueprint results immediately, then score one acquisition
-  // candidate on each app state refresh. This keeps the market tab responsive
-  // while suggestions for a market-purchased BPO accumulate in the background.
+  // Return the owned-blueprint results immediately, then score a small batch
+  // on each app-state refresh. This keeps the market tab responsive while every
+  // eligible acquisition source is evaluated in the background.
+  const marketBpoBatchSize = 32;
   const selectedMarketBpos = resumingMarketBpoScan && productionMarketBpoProgress < boundedMarketBpos.length
-    ? boundedMarketBpos.slice(productionMarketBpoProgress, productionMarketBpoProgress + 1)
+    ? boundedMarketBpos.slice(productionMarketBpoProgress, productionMarketBpoProgress + marketBpoBatchSize)
     : [];
   for (const { recipe, station, order } of selectedMarketBpos) {
       rootBlueprintCandidates.push({
@@ -1242,21 +1238,22 @@ function manufacturingOffers(
       if (blueprint.sourceKind === "owned")
         productionQuoteHandlers.set(quoteKey, { maxRuns: low, estimateAt });
       const candidates = new Set<number>([1, low]);
-      const candidateLimit = blueprint.sourceKind === "market_bpo" ? 4 : 96;
       const addRunBoundary = (boundary: number) => {
-        if (candidates.size >= candidateLimit) return;
         for (const runCount of [boundary - 1, boundary, boundary + 1])
           if (runCount >= 1 && runCount <= low) candidates.add(runCount);
       };
       for (const material of recipe.materials) {
         let cumulative = 0;
+        const materialBonus = row.facility_kind === "structure"
+          ? structureModifier?.material_bonus_percent ?? 0
+          : 0;
         for (const level of supply.get(material.typeId) ?? []) {
           cumulative += level.quantity;
           let minRun = 0;
           let maxRun = low;
           while (minRun < maxRun) {
             const mid = Math.ceil((minRun + maxRun) / 2);
-            const required = directEstimateAt(mid).materials.find((row) => row.typeId === material.typeId)?.quantity ?? Infinity;
+            const required = jobMaterialQuantity(material, mid, blueprint.material_efficiency, materialBonus);
             if (required <= cumulative) minRun = mid;
             else maxRun = mid - 1;
           }
@@ -1270,7 +1267,7 @@ function manufacturingOffers(
         let maxRun = low;
         while (minRun < maxRun) {
           const mid = Math.ceil((minRun + maxRun) / 2);
-          if (directEstimateAt(mid).outputQuantity <= cumulativeOutput) minRun = mid;
+          if (output.quantity * mid <= cumulativeOutput) minRun = mid;
           else maxRun = mid - 1;
         }
         addRunBoundary(minRun);
@@ -1496,7 +1493,6 @@ function manufacturingOffers(
     marketBpoCandidatesScanned: marketBpoCandidateCount,
     marketBpoCandidatesTotal: boundedMarketBpos.length,
     marketBpoScanComplete: productionMarketBpoProgress >= boundedMarketBpos.length,
-    marketBpoScanCapped,
   };
   return productionOfferCache;
 }
@@ -2491,7 +2487,6 @@ function productionSummary(): AppState["production"] {
     marketBpoCandidatesScanned: manufacturing.marketBpoCandidatesScanned,
     marketBpoCandidatesTotal: manufacturing.marketBpoCandidatesTotal,
     marketBpoScanComplete: manufacturing.marketBpoScanComplete,
-    marketBpoScanCapped: manufacturing.marketBpoScanCapped,
     contractOffers: manufacturing.contractOffers,
     reprocessingOffers: reprocessingOffers(productionStatic, main),
     projects,
