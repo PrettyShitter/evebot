@@ -76,6 +76,9 @@ const market = new MarketService(store, config.resources, config.demo);
 const bundledStatic = JSON.parse(
   readFileSync(join(config.resources, "static-data.json"), "utf8"),
 ) as StaticData;
+// The database, migrations, and static market data are ready. Notify the
+// updater before starting live market work, which can take much longer.
+parentPort!.postMessage({ kind: "ready" });
 setInterval(() => void market.scheduler.tick(), 1000).unref();
 if (!config.demo && !config.offline) market.scan();
 const alerts = new Alerts();

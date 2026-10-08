@@ -65,7 +65,7 @@ EVE_USER_DATA="$data" EVE_DEMO="$demo" "$target/Contents/MacOS/EVE Trader" "--ev
 new_pid=$!
 printf '%s\n' "$new_pid" > "$cache/new-pid"
 n=0
-while [ "$n" -lt 60 ]; do
+while [ "$n" -lt 180 ]; do
   if [ -f "$cache/healthy" ] && [ "$(cat "$cache/healthy")" = "$version" ]; then
     printf 'installed\n%s\n' "$version" > "$result"
     trap - EXIT INT TERM

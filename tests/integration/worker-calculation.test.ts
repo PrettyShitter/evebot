@@ -42,6 +42,8 @@ it("live engine filters ready offers instantly while recalculating structural ch
       offline: true,
     },
   });
+  const [ready] = await once(worker, "message");
+  expect(ready).toEqual({ kind: "ready" });
   const request = async (request: unknown) => {
     const response = once(worker, "message");
     worker.postMessage({ id: "test", request });
