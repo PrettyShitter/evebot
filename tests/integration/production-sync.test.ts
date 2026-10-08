@@ -93,6 +93,8 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       offline: true,
     },
   });
+  const [ready] = await once(worker, "message");
+  expect(ready).toEqual({ kind: "ready" });
   const at = new Date().toISOString();
   const own: OwnProductionData = {
     at,

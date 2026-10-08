@@ -47,6 +47,9 @@ let worker: Worker;
 let demo = process.env.EVE_DEMO === "1";
 const ENGINE_REQUEST_TIMEOUT_MS = 30_000;
 const UPDATE_BACKUP_TIMEOUT_MS = 10 * 60_000;
+const UPDATE_STARTUP_TIMEOUT_MS = 3 * 60_000;
+let engineReady = false;
+let engineFailed = false;
 const pending = new Map<
   string,
   {
@@ -66,25 +69,39 @@ function startWorker() {
       devBuild: !app.isPackaged,
     },
   });
-  worker.on("message", (m: { id: string; value: AppState; error?: string }) => {
-    const p = pending.get(m.id);
-    if (p) {
-      clearTimeout(p.timer);
-      pending.delete(m.id);
-      if (m.error) p.reject(new Error(m.error));
-      else
-        p.resolve({
-          ...m.value,
-          production: {
-            ...m.value.production,
-            syncing: productionSyncing,
-            syncError: productionSyncError,
-          },
-          update: updates?.view,
-        });
-    }
-  });
+  worker.on(
+    "message",
+    (
+      m:
+        | { kind: "ready" }
+        | { id: string; value: AppState; error?: string },
+    ) => {
+      if ("id" in m) {
+        const p = pending.get(m.id);
+        if (p) {
+          clearTimeout(p.timer);
+          pending.delete(m.id);
+          if (m.error) p.reject(new Error(m.error));
+          else
+            p.resolve({
+              ...m.value,
+              production: {
+                ...m.value.production,
+                syncing: productionSyncing,
+                syncError: productionSyncError,
+              },
+              update: updates?.view,
+            });
+        }
+        return;
+      }
+      if (m.kind === "ready") {
+        engineReady = true;
+      }
+    },
+  );
   worker.on("error", () => {
+    engineFailed = true;
     for (const p of pending.values()) {
       clearTimeout(p.timer);
       p.reject(new Error("Движок остановлен. Перезапустите приложение."));
@@ -546,8 +563,18 @@ app.whenReady().then(async () => {
       }).catch(() => {}),
   );
   await window.loadURL(entry);
+  if (process.argv.some((arg) => arg.startsWith("--eve-update-token="))) {
+    await waitForUpdateIdle(
+      () => !engineReady && !engineFailed,
+      { timeoutMs: UPDATE_STARTUP_TIMEOUT_MS, intervalMs: 25 },
+    );
+    if (!engineReady)
+      throw new Error("Локальная база не успела открыться после обновления");
+    // Acknowledge as soon as the window and database are ready. The first full
+    // market state may take much longer while its background calculation runs.
+    macUpdates?.acknowledgeHealthy(process.argv);
+  }
   const initialState = await requestEngine({ kind: "state" });
-  macUpdates?.acknowledgeHealthy(process.argv);
   if (!demo && process.env.EVE_BENCHMARK !== "1") {
     const wallets =
       initialState.characters.length === 3 &&

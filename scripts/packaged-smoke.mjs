@@ -1,8 +1,18 @@
 import { _electron as electron } from "@playwright/test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  readFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
+const version = JSON.parse(readFileSync("package.json", "utf8")).version;
+const updateToken = process.platform === "darwin" ? randomUUID() : undefined;
 const executable =
   process.argv[2] ??
   (process.platform === "darwin"
@@ -11,6 +21,11 @@ const executable =
 const directory = mkdtempSync(join(tmpdir(), "eve-packaged-"));
 let app;
 const checks = [];
+if (updateToken) {
+  const cache = join(directory, "update-cache", updateToken);
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, "manifest.json"), JSON.stringify({ version }));
+}
 try {
   console.log("Launching packaged EVE Trader");
   if (process.platform === "darwin") {
@@ -36,6 +51,7 @@ try {
         EVE_DEMO: "1",
         EVE_OFFLINE: "1",
       },
+      args: updateToken ? [`--eve-update-token=${updateToken}`] : [],
       timeout: 30000,
     });
   app = await launch();
@@ -43,6 +59,15 @@ try {
   let page = await app.firstWindow();
   console.log("First window opened; waiting for the market tab");
   await page.getByRole("tab", { name: "Рынок", exact: true }).waitFor();
+  if (updateToken) {
+    const healthy = join(directory, "update-cache", updateToken, "healthy");
+    const deadline = Date.now() + 10000;
+    while (!existsSync(healthy) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    if (!existsSync(healthy) || readFileSync(healthy, "utf8") !== version)
+      throw Error("Packaged app did not acknowledge healthy update startup");
+    checks.push("update health acknowledged after database initialization");
+  }
   console.log("Market tab opened; requesting initial engine state");
   const state = await page.evaluate(() =>
     window.eve.request({ kind: "state" }),
