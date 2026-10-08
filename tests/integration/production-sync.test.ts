@@ -532,7 +532,13 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
     const inventoryQuote = await request(undefined);
     const inventoryRootOffer = inventoryQuote.value?.production.offers.find((offer) => offer.estimate.blueprintItemId === "9101");
     const inventoryPurchase = inventoryRootOffer?.chainPlan.actions.find((action) => action.kind === "purchase" && action.typeId === "34");
-    expect(inventoryPurchase?.sources).toContainEqual(expect.objectContaining({ inventoryLotId: sourceLotId, quantity: 1 }));
+    expect(inventoryPurchase?.sources).toContainEqual(expect.objectContaining({
+      inventoryLotId: sourceLotId, quantity: 1, locationId: "60003760",
+      locationName: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+    }));
+    expect(inventoryPurchase?.sources).toContainEqual(expect.objectContaining({
+      id: "ask-34", locationId: "60003760", locationName: "Jita IV - Moon 4 - Caldari Navy Assembly Plant",
+    }));
     expect(inventoryRootOffer?.estimate.totalCost && inventoryRootOffer.estimate.cashRequired).toBeTruthy();
     expect(Number(inventoryRootOffer!.estimate.totalCost) - Number(inventoryRootOffer!.estimate.cashRequired)).toBeCloseTo(0.5, 2);
 
@@ -659,6 +665,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
     const projectId = "00000000-0000-4000-8000-000000000001";
     const transactionId = "987654321";
     const structureTransactionId = "987654323";
+    const projectStartedAt = "2026-10-08T00:00:00.000Z";
     const projectPayload = {
       offerId: "fixture-offer",
       itemName: "Fixture Product",
@@ -671,7 +678,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       expectedCost: "65.00",
       cashRequired: "55.00",
       expectedProfit: "100.00",
-      startedAt: at,
+      startedAt: projectStartedAt,
       estimate: {
         blueprintItemId: "9102",
         blueprintTypeId: "683",

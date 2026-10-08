@@ -140,4 +140,22 @@ describe("make/buy chain planner", () => {
       sources: [expect.objectContaining({ id: "inventory:lot-1", quantity: 1, inventoryLotId: "lot-1" })],
     }));
   });
+
+  it("retains station provenance for every market fill in a purchase action", () => {
+    const result = planMakeBuyChain({
+      targetTypeId: "RAW",
+      targetQuantity: 3,
+      recipes: [],
+      asksByType: new Map([["RAW", [
+        { id: "jita-order", price: "2.00", quantity: 2, locationId: "60003760", locationName: "Jita IV" },
+        { id: "perimeter-order", price: "3.00", quantity: 1, locationId: "60003764", locationName: "Perimeter III" },
+      ]]]),
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.actions[0]?.sources).toEqual([
+      expect.objectContaining({ id: "jita-order", quantity: 2, unitCost: "2.00", locationId: "60003760", locationName: "Jita IV" }),
+      expect.objectContaining({ id: "perimeter-order", quantity: 1, unitCost: "3.00", locationId: "60003764", locationName: "Perimeter III" }),
+    ]);
+  });
 });

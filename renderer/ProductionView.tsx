@@ -463,7 +463,9 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                           <div className="mt-2 space-y-1">
                             {offer.chainPlan.reasons.map((reason) => <div key={reason} className="caption text-amber-300">{reason}</div>)}
                             {offer.chainPlan.actions.map((action) => <div key={action.id} className="flex justify-between gap-3 text-xs">
-                              <span>{action.kind === "manufacturing" ? "Изготовить" : "Купить"} <CopyName name={action.typeName ?? `Type ${action.typeId}`} onCopy={copyName} /> · {action.kind === "manufacturing" ? `${action.runs} прог.` : `${action.quantity.toLocaleString("ru-RU")} шт.`}{action.facilityName ? ` · ${action.facilityName}` : ""}</span>
+                              <span>{action.kind === "manufacturing" ? "Изготовить" : "Купить"} <CopyName name={action.typeName ?? `Type ${action.typeId}`} onCopy={copyName} /> · {action.kind === "manufacturing" ? `${action.runs} прог.` : `${action.quantity.toLocaleString("ru-RU")} шт.`}{action.facilityName ? ` · ${action.facilityName}` : ""}
+                                {action.kind === "purchase" && action.sources?.map((source) => <span key={source.id} className="caption block pl-2">{source.inventoryLotId ? "Остаток проекта" : "Рыночный ордер"} · {source.locationName ?? source.locationId ?? "площадка неизвестна"} · {source.quantity.toLocaleString("ru-RU")} шт. × {isk(source.unitCost)}</span>)}
+                              </span>
                               <span className="shrink-0">{isk(action.cost)}</span>
                             </div>)}
                             <div className="caption border-t border-border pt-1">Полная цепочка: {isk(offer.chainPlan.totalCost)} ISK</div>
@@ -585,6 +587,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                                         <CopyName name={action.typeName ?? `Type ${action.typeId}`} onCopy={copyName} />
                                         {action.kind === "manufacturing" ? ` · ${action.runs} прог.` : ` · ${action.quantity.toLocaleString("ru-RU")} шт.`}
                                         {action.facilityName ? ` · ${action.facilityName}` : ""}
+                                        {action.kind === "purchase" && action.sources?.map((source) => <span key={source.id} className="caption block pl-2">{source.inventoryLotId ? "Остаток проекта" : "Рыночный ордер"} · {source.locationName ?? source.locationId ?? "площадка неизвестна"} · {source.quantity.toLocaleString("ru-RU")} шт. × {isk(source.unitCost)}</span>)}
                                       </span>
                                       <span className="shrink-0">{isk(action.cost)}</span>
                                     </div>

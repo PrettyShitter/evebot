@@ -33,7 +33,14 @@ export interface ChainAction {
   parents: string[];
   typeName?: string;
   facilityName?: string | null;
-  sources?: { id: string; quantity: number; unitCost: string; inventoryLotId?: string }[];
+  sources?: {
+    id: string;
+    quantity: number;
+    unitCost: string;
+    locationId?: string;
+    locationName?: string;
+    inventoryLotId?: string;
+  }[];
 }
 
 export interface ChainPlan {
@@ -182,6 +189,8 @@ export function planMakeBuyChain(input: {
             id: fill.id,
             quantity: fill.quantity,
             unitCost: fill.price,
+            ...(fill.locationId ? { locationId: fill.locationId } : {}),
+            ...(fill.locationName ? { locationName: fill.locationName } : {}),
             ...(fill.inventoryLotId ? { inventoryLotId: fill.inventoryLotId } : {}),
           })),
         });
