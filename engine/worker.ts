@@ -26,6 +26,7 @@ import type { ChainPlan, ChainRecipe } from "./production/chain-planner";
 import { listingFee } from "./market/fees";
 import { pnl } from "./market/depth";
 import { estimateReprocessing } from "./production/reprocessing";
+import { isFreshTimestamp, isUnexpiredTimestamp } from "./production/freshness";
 import { availableBlueprintRuns, canReserveBlueprintRuns } from "./production/blueprints";
 import { allocateBpcBundleCost, allocateBlueprintAcquisitionCost, groupKnownBpcCopies, knownBpcCopies, matchCompletedBlueprintContractAcquisitions } from "./production/contract-acquisition";
 import { Graph } from "./routes/graph";
@@ -181,10 +182,10 @@ function confirmPublicContractBlueprint(request: Extract<AppRequest, { kind: "pr
   ).get(request.contractId) as { location_id: string | null; expires_at: string | null; items_payload: string | null; observed_at: string; coverage_status: string } | undefined;
   if (!contract || contract.coverage_status !== "available" || !contract.location_id)
     throw Error("Контракт больше не подтверждён текущим снимком ESI. Обновите данные контрактов.");
-  if (!contract.expires_at || Date.parse(contract.expires_at) <= Date.now())
+  if (!isUnexpiredTimestamp(contract.expires_at))
     throw Error("Срок контракта истёк; обновите список перед подтверждением.");
-  if (Date.now() - Date.parse(contract.observed_at) > 60 * 60 * 1000)
-    throw Error("Снимок контракта старше часа. Обновите данные перед ручным подтверждением.");
+  if (!isFreshTimestamp(contract.observed_at, 60 * 60 * 1000))
+    throw Error("Снимок контракта старше часа, некорректен или датирован будущим. Обновите данные перед подтверждением.");
   const payload = JSON.parse(contract.items_payload ?? "{}") as {
     items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
   };
@@ -626,7 +627,7 @@ function manufacturingOffers(
     .filter((x): x is typeof x & { station: Station } => !!x.station)
     .filter((x) => hubSystems.has(x.station.systemId))
     .filter((x) => (JSON.parse(x.row.services_payload) as string[]).includes("manufacturing"))
-    .filter((x) => Date.parse(x.row.observed_at) >= Date.now() - 30 * 24 * 60 * 60 * 1000);
+    .filter((x) => isFreshTimestamp(x.row.observed_at, 30 * 24 * 60 * 60 * 1000));
   if (!profiles.length) return empty;
 
   const profileRow = store.sql
@@ -646,7 +647,7 @@ function manufacturingOffers(
     queue: JSON.parse(profileRow.skill_queue_payload) as ProfileData["queue"],
     at: profileRow.observed_at,
   };
-  if (Date.now() - Date.parse(profile.at) > 30 * 24 * 60 * 60 * 1000) return empty;
+  if (!isFreshTimestamp(profile.at, 30 * 24 * 60 * 60 * 1000)) return empty;
   // ESI can keep skill levels stale until the character next logs in. A
   // completed queue entry above the reported trained level proves this profile
   // cannot certify current Alpha eligibility.
@@ -700,7 +701,7 @@ function manufacturingOffers(
     }));
   });
   if (!blueprints.length && !contractBlueprints.length) return empty;
-  if (blueprints.some((blueprint) => Date.now() - Date.parse(blueprint.observed_at) > 7 * 24 * 60 * 60 * 1000)) return empty;
+  if (blueprints.some((blueprint) => !isFreshTimestamp(blueprint.observed_at, 7 * 24 * 60 * 60 * 1000))) return empty;
   const activeBlueprintAllocations = store.sql.prepare(
     `SELECT a.blueprint_source_id,sum(a.runs) AS runs,count(*) AS allocations
      FROM blueprint_run_allocations a JOIN production_projects p ON p.id=a.project_id
@@ -716,7 +717,7 @@ function manufacturingOffers(
   const marketData = productionMarketOrders(regions, allowedLocations);
   if (!marketData.complete) return empty;
   const now = Date.now();
-  if (marketData.snapshots.some((snapshot) => Date.parse(snapshot.expiresAt) <= now))
+  if (marketData.snapshots.some((snapshot) => !isUnexpiredTimestamp(snapshot.expiresAt, now)))
     return empty;
   const staleBefore = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
   const adjustedObserved = store.sql.prepare("SELECT max(observed_at) observed FROM production_adjusted_prices").get() as { observed: string | null };
@@ -844,7 +845,7 @@ function manufacturingOffers(
     observed_at: string;
   }[];
   const structureModifiers = new Map(structureProductProfiles.map((modifier) =>
-    [`${modifier.location_id}:${modifier.output_type_id}`, Date.parse(modifier.observed_at) >= Date.now() - 7 * 24 * 60 * 60 * 1000 ? modifier : undefined] as const,
+    [`${modifier.location_id}:${modifier.output_type_id}`, isFreshTimestamp(modifier.observed_at, 7 * 24 * 60 * 60 * 1000) ? modifier : undefined] as const,
   ));
   const skillLevels = new Map(effectiveSkills.map((skill) => [skill.typeId, skill.usableLevel]));
   const skill = (id: string) => skillLevels.get(id) ?? 0;
@@ -1449,7 +1450,7 @@ function reprocessingOffers(
   ).all() as { location_id: string; name: string; system_id: string; services_payload: string; access_status: "confirmed"; reprocessing_yield_bonus: string | null; reprocessing_tax: string | null; observed_at: string }[])
     .map((row) => ({ row, station: hubStations.find((station) => station.id === row.location_id) }))
     .filter((entry): entry is typeof entry & { station: (typeof hubStations)[number] } => !!entry.station)
-    .filter((entry) => Date.parse(entry.row.observed_at) >= Date.now() - 30 * 24 * 60 * 60 * 1000)
+    .filter((entry) => isFreshTimestamp(entry.row.observed_at, 30 * 24 * 60 * 60 * 1000))
     .filter((entry) => (JSON.parse(entry.row.services_payload) as string[]).includes("reprocessing"));
   if (!profiles.length) return [];
   const profileRow = store.sql.prepare(
@@ -1463,7 +1464,7 @@ function reprocessingOffers(
     queue: JSON.parse(profileRow.skill_queue_payload) as ProfileData["queue"],
     at: profileRow.observed_at,
   };
-  if (Date.now() - Date.parse(profile.at) > 30 * 24 * 60 * 60 * 1000) return [];
+  if (!isFreshTimestamp(profile.at, 30 * 24 * 60 * 60 * 1000)) return [];
   if (profile.queue.some((entry) =>
     !!entry.finish_date && Date.parse(entry.finish_date) <= Date.parse(profile.at) &&
     entry.finished_level > (profile.skills.find((skill) => skill.skill_id === entry.skill_id)?.trained_skill_level ?? 0))) return [];
@@ -1485,7 +1486,7 @@ function reprocessingOffers(
     ...confirmedStructures.map((row) => [row.location_id, row.name] as const),
   ]);
   const marketData = productionMarketOrders(regions, sourcingLocations);
-  if (!marketData.complete || marketData.snapshots.some((snapshot) => Date.parse(snapshot.expiresAt) <= Date.now())) return [];
+  if (!marketData.complete || marketData.snapshots.some((snapshot) => !isUnexpiredTimestamp(snapshot.expiresAt))) return [];
   const reservationAmounts = store.sql.prepare("SELECT amount FROM production_reservations WHERE paid=0").all() as { amount: string }[];
   const cacheKey = JSON.stringify([
     marketData.snapshots.map((snapshot) => snapshot.id), profileRow.observed_at,
@@ -1855,7 +1856,7 @@ function productionSummary(): AppState["production"] {
     projectMarketLocations,
   );
   const projectMarketFresh = projectMarket.complete && projectMarket.snapshots.length > 0 &&
-    projectMarket.snapshots.every((snapshot) => Date.parse(snapshot.expiresAt) > Date.now());
+    projectMarket.snapshots.every((snapshot) => isUnexpiredTimestamp(snapshot.expiresAt));
   const projectMarketAt = projectMarketFresh
     ? projectMarket.snapshots.map((snapshot) => snapshot.modifiedAt).sort().at(-1) ?? null
     : null;
@@ -2296,7 +2297,7 @@ function productionSummary(): AppState["production"] {
     structureId: row.location_id,
     structureName: row.name,
     systemId: row.system_id,
-    state: row.state === "available" && row.observed_at && Date.parse(row.observed_at) < Date.now() - 15 * 60 * 1000
+    state: row.state === "available" && !isFreshTimestamp(row.observed_at, 15 * 60 * 1000)
       ? "stale" as const
       : row.state ?? (optionalMissingScopes.includes("esi-markets.structure_markets.v1") ? "missing_scope" as const : "not_checked" as const),
     orderCount: row.order_count ?? 0,

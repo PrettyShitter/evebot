@@ -66,6 +66,19 @@ describe("reprocessing estimator", () => {
     expect(result.reasons).toContain("Не подтверждён итоговый выход из Reprocess preview на этой площадке");
   });
 
+  it("does not trust malformed, stale, or future-dated game preview evidence", () => {
+    const dates = [
+      "not-a-date",
+      new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString(),
+      new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+    ];
+    for (const evidenceAt of dates) {
+      const result = estimateReprocessing({ ...fixture, evidenceAt });
+      expect(result.status).toBe("review");
+      expect(result.reasons).toContain("Дата подтверждения выхода некорректна, слишком старая или находится в будущем; обновите Reprocess preview");
+    }
+  });
+
   it("deducts the configured fee from adjusted output value and reviews an unknown fee", () => {
     const taxed = estimateReprocessing({
       ...fixture,

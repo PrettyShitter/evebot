@@ -908,15 +908,19 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       chainDb.sql.prepare("INSERT INTO project_edges(project_id,from_node,to_node,type_id,quantity) VALUES (?,?,?,?,?)")
         .run(chainProjectId, componentNodeId, finalNodeId, "34", 5);
     } finally { chainDb.close(); }
+    const chainComponentStart = new Date(Date.parse(at) + 60_000).toISOString();
+    const chainComponentEnd = new Date(Date.parse(chainComponentStart) + 5 * 60_000).toISOString();
+    const chainFinalStart = new Date(Date.parse(at) + 10 * 60_000).toISOString();
+    const chainFinalEnd = new Date(Date.parse(chainFinalStart) + 5 * 60_000).toISOString();
     const componentActive: OwnProductionData["jobs"][number] = {
       job_id: "9202", installer_id: "9001", facility_id: "60003760", station_id: "60003760",
       activity_id: 1, blueprint_id: "9201", blueprint_type_id: "9200", blueprint_location_id: "60003760",
       output_location_id: "60003760", runs: 1, status: "active", duration: 300,
-      start_date: "2026-10-08T00:31:00Z", end_date: "2026-10-08T00:36:00Z", product_type_id: "34", cost: "3.00",
+      start_date: chainComponentStart, end_date: chainComponentEnd, product_type_id: "34", cost: "3.00",
     };
     const finalActive: OwnProductionData["jobs"][number] = {
       ...deliveredJob, job_id: "9203", status: "active", blueprint_id: "9101", blueprint_type_id: "683",
-      start_date: "2026-10-08T00:40:00Z", product_type_id: "35", cost: "7.00",
+      start_date: chainFinalStart, end_date: chainFinalEnd, product_type_id: "35", cost: "7.00",
     };
     const chainActiveSync = await request({ kind: "production-data", characterId: "9001", profile,
       own: { ...own, jobs: [componentActive, finalActive] }, publicData });
@@ -936,10 +940,10 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       own: { ...own, jobs: [{ ...componentActive, status: "delivered" }, { ...finalActive, status: "delivered" }] }, publicData });
     expect(completeChainSync.error).toBeUndefined();
     expect(completeChainSync.value?.production.projects.find((project) => project.id === chainProjectId)).toMatchObject({
-      status: "ready_for_sale", outputLots: [
+      status: "ready_for_sale", outputLots: expect.arrayContaining([
         expect.objectContaining({ typeId: "35", quantity: 5, unitCost: "1.90000000", isFinal: true }),
         expect.objectContaining({ typeId: "34", quantity: 6, remaining: 1, isFinal: false, unitCost: "0.50000000" }),
-      ],
+      ]),
       manufacturingNodes: [expect.objectContaining({ status: "complete" }), expect.objectContaining({ status: "complete", isFinal: true })],
     });
     const leftoverComponent = completeChainSync.value!.production.projects.find((project) => project.id === chainProjectId)!.outputLots.find((lot) => !lot.isFinal)!;

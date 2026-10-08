@@ -3,6 +3,7 @@ import { fill, pnl, type Level } from "../market/depth";
 import { listingFee, rates } from "../market/fees";
 import type { ReprocessingRecipe } from "../market/static-data";
 import type { SellerProfile } from "../market/fees";
+import { isFreshTimestamp } from "./freshness";
 
 export interface ReprocessingEstimate {
   status: "ready" | "review";
@@ -61,8 +62,8 @@ export function estimateReprocessing(input: {
     reasons.push("Не подтверждена ставка налога переработки для этой площадки");
   const yieldRate = input.yieldPercent ? D(input.yieldPercent).div(100) : D(0);
   if (yieldRate.lt(0) || yieldRate.gt(1)) reasons.push("Итоговый выход должен быть от 0 до 100 процентов");
-  if (input.evidenceAt && Date.now() - Date.parse(input.evidenceAt) > 30 * 24 * 60 * 60 * 1000)
-    reasons.push("Подтверждение выхода переработки устарело; обновите Reprocess preview");
+  if (input.yieldPercent && input.evidenceAt && !isFreshTimestamp(input.evidenceAt, 30 * 24 * 60 * 60 * 1000))
+    reasons.push("Дата подтверждения выхода некорректна, слишком старая или находится в будущем; обновите Reprocess preview");
   const purchase = fill(input.supply, consumedQuantity, "buy");
   const inputSources = new Map<string, { locationId: string; locationName: string; quantity: number; total: ReturnType<typeof D> }>();
   for (const level of purchase.fills) {
