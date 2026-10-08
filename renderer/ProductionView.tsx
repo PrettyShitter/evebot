@@ -457,7 +457,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                     <tr key={offer.id} className="border-b border-border align-top">
                       <td className="p-2"><CopyName name={offer.itemName} onCopy={copyName} />
                         <div className="caption mt-1">{offer.contractTitle} · {offer.pickupLocation} · контракт проверен {timestamp(offer.contractObservedAt)} · рынок {timestamp(offer.observedAt)} · до {timestamp(offer.expiresAt)}</div>
-                        <div className="caption">Контракт #{offer.contractId} · {offer.blueprintTypeName} · {offer.facilityName} · {offer.includedItemCount} позиций</div>
+                        <div className="caption">Контракт #{offer.contractId} · <CopyName name={offer.blueprintTypeName} onCopy={copyName} /> · {offer.facilityName} · {offer.includedItemCount} позиций</div>
                         <div className="caption">Копий этого чертежа в наборе: {offer.blueprintCopies} · суммарно {offer.bundleRuns} прогонов</div>
                         {!offer.blueprintOnly && <div className="caption text-amber-300">Смешанный контракт: в затраты включена вся сумма {isk(offer.contractPrice)}; остальные предметы не оцениваются и не добавляют прибыль.</div>}
                         <MarketSignalView signal={offer.marketSignal} />
@@ -570,7 +570,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                       <tr key={offer.id} className="border-b border-border align-top">
                         <td className="p-3">
                           <CopyName name={offer.itemName} onCopy={copyName} />
-                          <div className="caption mt-1">{offer.blueprintTypeName} · {offer.facilityName} · {offer.systemId}</div>
+                          <div className="caption mt-1"><CopyName name={offer.blueprintTypeName} onCopy={copyName} /> · {offer.facilityName} · {offer.systemId}</div>
                           {offer.blueprintSource.kind === "market_bpo" && <div className="caption mt-1 text-amber-300">BPO ещё не принадлежит основе: купить по sell-ордеру #{offer.blueprintSource.purchaseOrderId} за {isk(offer.blueprintSource.purchasePrice)}. Первый цикл и сортировка учитывают полную покупку; после покупки синхронизируйте чертежи, чтобы закрепить план.</div>}
                           <details className="mt-2">
                             <summary className="cursor-pointer text-xs text-muted-foreground">Материалы и расчёт</summary>
@@ -742,7 +742,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 <div className="mt-3 space-y-1" aria-label={`Региональная история выходов ${offer.itemName}`}>
                   {offer.marketSignals.map((row) => (
                     <div key={row.typeId} className="rounded border border-border p-2">
-                      <div className="caption font-medium">Ликвидность выхода: {row.itemName}</div>
+                      <div className="caption font-medium">Ликвидность выхода: <CopyName name={row.itemName} onCopy={copyName} /></div>
                       <MarketSignalView signal={row.signal} />
                     </div>
                   ))}
@@ -1006,7 +1006,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                       {facility.taxRate ? ` · tax ${(Number(facility.taxRate) * 100).toFixed(2)}%` : " · tax неизвестен"}
                       {facility.reprocessingYieldPercent ? ` · reprocess ${(Number(facility.reprocessingYieldPercent) * 100).toFixed(2)}%` : ""}
                       {facility.reprocessingTaxRate ? ` · reprocess tax ${(Number(facility.reprocessingTaxRate) * 100).toFixed(2)}%` : " · reprocess tax неизвестен"}
-                      {facility.structureProductProfiles.map((product) => ` · ${product.outputName}: ME ${product.materialBonusPercent}% / TE ${product.timeBonusPercent}% / fee ${(Number(product.brokerFeeRate) * 100).toFixed(2)}% · ${timestamp(product.observedAt)}`)}
+                      {facility.structureProductProfiles.map((product) => <span key={`${facility.id}:${product.outputTypeId}`}> · <CopyName name={product.outputName} onCopy={copyName} />: ME {product.materialBonusPercent}% / TE {product.timeBonusPercent}% / fee {(Number(product.brokerFeeRate) * 100).toFixed(2)}% · {timestamp(product.observedAt)}</span>)}
                     </span>
                   </div>
                 ))}
@@ -1207,7 +1207,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                       const quantity = Math.min(needed, purchase.available);
                       return (
                         <div key={`${purchase.characterId}:${purchase.transactionId}`} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span>{purchase.typeName} × {purchase.available} доступно · {purchase.unitPrice} ISK/шт. · {purchase.locationName} · {new Date(purchase.date).toLocaleString()}</span>
+                          <span><CopyName name={purchase.typeName} onCopy={copyName} /> × {purchase.available} доступно · {purchase.unitPrice} ISK/шт. · {purchase.locationName} · {new Date(purchase.date).toLocaleString()}</span>
                           <Button size="sm" variant="outline" disabled={busy || quantity <= 0} onClick={() => void request({
                             kind: "production.purchase.allocate",
                             projectId: project.id,
