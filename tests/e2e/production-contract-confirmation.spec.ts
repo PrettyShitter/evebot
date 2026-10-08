@@ -25,7 +25,7 @@ test("unknown public BPC attributes can be confirmed in the desktop UI", async (
       items: [{
         recordId: "9988776656",
         typeId: "683",
-        quantity: 1,
+        quantity: 3,
         isBlueprintCopy: true,
         materialEfficiency: null,
         timeEfficiency: null,
@@ -46,6 +46,7 @@ test("unknown public BPC attributes can be confirmed in the desktop UI", async (
     const panel = page.locator('[aria-label="Публичные контракты с копиями чертежей"]');
     const row = panel.locator("article").filter({ hasText: `#${contractId}` });
     await expect(row).toContainText("Атрибуты неизвестны");
+    await expect(row).toContainText("3 BPC");
     const copyButton = row.locator('button[aria-label^="Скопировать "]').first();
     const copiedName = (await copyButton.getAttribute("aria-label"))?.replace(/^Скопировать /, "");
     expect(copiedName).toBeTruthy();

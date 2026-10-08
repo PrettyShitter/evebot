@@ -52,12 +52,14 @@ export function knownBpcCopies<T extends PublicBlueprintContractListing>(
   if (
     possibleBlueprints.some(
       (item) =>
-        item.quantity !== 1 ||
+        !Number.isSafeInteger(item.quantity) ||
+        item.quantity < 1 ||
         item.isBlueprintCopy !== true ||
         item.materialEfficiency === null ||
         item.timeEfficiency === null ||
         item.runs === null ||
-        item.runs <= 0,
+        item.runs <= 0 ||
+        !Number.isSafeInteger(item.runs * item.quantity),
     )
   )
     return null;
@@ -69,7 +71,7 @@ export function groupKnownBpcCopies<T extends PublicBlueprintContractListing>(
 ) {
   const copies = knownBpcCopies(listing);
   if (!copies) return null;
-  const bundleRuns = copies.reduce((total, item) => total + item.runs!, 0);
+  const bundleRuns = copies.reduce((total, item) => total + item.runs! * item.quantity, 0);
   const groups = new Map<
     string,
     { item: (typeof copies)[number]; copies: number; runs: number }
@@ -78,9 +80,9 @@ export function groupKnownBpcCopies<T extends PublicBlueprintContractListing>(
     const key = [item.typeId, item.materialEfficiency, item.timeEfficiency, item.runs].join(":");
     const group = groups.get(key);
     if (group) {
-      group.copies++;
-      group.runs += item.runs!;
-    } else groups.set(key, { item, copies: 1, runs: item.runs! });
+      group.copies += item.quantity;
+      group.runs += item.runs! * item.quantity;
+    } else groups.set(key, { item, copies: item.quantity, runs: item.runs! * item.quantity });
   }
   return { bundleRuns, groups: [...groups.values()] };
 }
@@ -141,7 +143,8 @@ export function matchCompletedBlueprintContractAcquisitions(
 
   const listings = new Map<string, PublicBlueprintContractListing[]>();
   for (const listing of publicListings) {
-    if (!knownBpcCopies(listing) ||
+    const listingCopies = knownBpcCopies(listing);
+    if (!listingCopies || listingCopies.some((item) => item.quantity !== 1) ||
         !validMoney(listing.price) || !D(listing.price).gt(0)) continue;
     const list = listings.get(listing.contractId) ?? [];
     list.push(listing);

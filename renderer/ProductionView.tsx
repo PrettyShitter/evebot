@@ -89,6 +89,9 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const [reprocessingTaxRate, setReprocessingTaxRate] = useState("");
   const [reprocessingYieldPercent, setReprocessingYieldPercent] = useState("");
   const [evidence, setEvidence] = useState("");
+  const [newStructureId, setNewStructureId] = useState("");
+  const [newStructureName, setNewStructureName] = useState("");
+  const [newStructureSystemId, setNewStructureSystemId] = useState("30000142");
   const [maxBatchCost, setMaxBatchCost] = useState("");
   const [minProductionProfit, setMinProductionProfit] = useState("");
   const [productionTypeFilter, setProductionTypeFilter] = useState("");
@@ -101,7 +104,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
     ? production.blueprintContracts
     : production.blueprintContracts.slice(0, 5);
   const bpcItemsNeedConfirmation = production.blueprintContracts.reduce(
-    (count, contract) => count + contract.blueprints.filter((blueprint) => !blueprint.attributesKnown && blueprint.quantity === 1).length,
+    (count, contract) => count + contract.blueprints.filter((blueprint) => !blueprint.attributesKnown && blueprint.quantity > 0).length,
     0,
   );
   const visibleProjects = production.projects.filter((project) => {
@@ -354,7 +357,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
               <p className="caption">Не удалось прочитать состав {production.contractCoverage.itemErrors} контрактов.</p>
             )}
             {bpcItemsNeedConfirmation > 0 && (
-              <p className="caption rounded border border-amber-700/50 p-3">{bpcItemsNeedConfirmation} копий без атрибутов ESI пока исключены из расчётов. Подтверждение доступно только для свежих контрактов и отдельных копий с количеством 1.</p>
+              <p className="caption rounded border border-amber-700/50 p-3">{bpcItemsNeedConfirmation} записей BPC без атрибутов ESI пока исключены из расчётов. Для свежей записи можно вручную сверить атрибуты одного экземпляра или одинакового стека копий в игре.</p>
             )}
             {!production.blueprintContracts.length ? (
               <p className="caption">Копий чертежей с доступными атрибутами пока не найдено. Контрактные чертежи ещё не включены в готовые расчёты партий.</p>
@@ -377,13 +380,13 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                               <span><CopyName name={blueprint.typeName} onCopy={copyName} /> · {blueprint.quantity} BPC · запись #{blueprint.recordId}</span>
                               <span>{blueprint.attributesKnown ? `ME ${blueprint.materialEfficiency} · TE ${blueprint.timeEfficiency} · ${blueprint.runs} runs${blueprint.attributesSource === "manual" ? ` · вручную ${timestamp(blueprint.confirmedAt)}: ${blueprint.evidence}` : blueprint.attributesSource === "conflict" ? ` · ESI расходится с ручной сверкой от ${timestamp(blueprint.confirmedAt)}; расчёт использует ESI` : " · данные ESI"}` : "Атрибуты неизвестны — требуется сверка в игре"}</span>
                             </div>
-                            {!blueprint.attributesKnown && blueprint.quantity === 1 && (
+                            {!blueprint.attributesKnown && blueprint.quantity > 0 && (
                               <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                                 <Input aria-label={`ME контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="10" step="1" placeholder="ME 0–10" value={values.me} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, me: event.target.value } }))} />
                                 <Input aria-label={`TE контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="20" step="1" placeholder="TE 0–20" value={values.te} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, te: event.target.value } }))} />
                                 <Input aria-label={`Прогоны контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="1" step="1" placeholder="Осталось прогонов" value={values.runs} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, runs: event.target.value } }))} />
                                 <Input aria-label={`Свидетельство контракта ${contract.contractId}, запись ${blueprint.recordId}`} placeholder="Где проверено в EVE" value={values.evidence} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, evidence: event.target.value } }))} />
-                                <div className="caption sm:col-span-2 lg:col-span-4">Откройте контракт в игре и сверьте ME, TE и оставшиеся прогоны этой копии. Подтверждение относится только к записи #{blueprint.recordId}; цена всего набора всё равно нужна для покупки.</div>
+                                <div className="caption sm:col-span-2 lg:col-span-4">Откройте контракт в игре и сверьте ME, TE и оставшиеся прогоны. Атрибуты применятся ко всем {blueprint.quantity} копиям в записи #{blueprint.recordId}; подтверждайте только если это один одинаковый стек. Цена всего набора всё равно нужна для покупки.</div>
                                 <Button type="button" size="sm" disabled={!valid || busy} onClick={() => void request({
                                   kind: "production.contract.blueprint.confirm",
                                   contractId: contract.contractId,
@@ -782,6 +785,39 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 проверили в игре. Неизвестные налоги и услуги не будут считаться нулевыми.
               </p>
             </div>
+            <div className="space-y-3 rounded border border-border p-3">
+              <div>
+                <h3 className="text-sm font-medium">Добавить структуру вручную</h3>
+                <p className="caption mt-1">Укажите ID, название и систему из игры. Площадка останется непроверенной, пока вы отдельно не подтвердите доступ и услуги.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="field">
+                  ID структуры в Jita/Perimeter
+                  <Input aria-label="ID структуры в Jita/Perimeter" inputMode="numeric" value={newStructureId} onChange={(event) => setNewStructureId(event.target.value)} />
+                </label>
+                <label className="field">
+                  Название структуры из игры
+                  <Input aria-label="Название структуры из игры" value={newStructureName} onChange={(event) => setNewStructureName(event.target.value)} />
+                </label>
+                <label className="field">
+                  Система структуры
+                  <select aria-label="Система структуры" className="h-9 rounded-md border border-input bg-background px-3 text-sm" value={newStructureSystemId} onChange={(event) => setNewStructureSystemId(event.target.value)}>
+                    {["30000142", "30000144"].map((systemId) => <option key={systemId} value={systemId}>{state.systemNames[systemId] ?? (systemId === "30000142" ? "Jita" : "Perimeter")}</option>)}
+                  </select>
+                </label>
+              </div>
+              <Button
+                variant="outline"
+                disabled={busy || !/^\d{1,20}$/.test(newStructureId) || newStructureId === "0" || newStructureName.trim().length < 3}
+                onClick={() => void request({ kind: "production.facility.register", locationId: newStructureId, name: newStructureName.trim(), systemId: newStructureSystemId as "30000142" | "30000144" }).then((result) => {
+                  if (result) {
+                    setFacilityId(newStructureId);
+                    setNewStructureId("");
+                    setNewStructureName("");
+                  }
+                })}
+              >Добавить структуру</Button>
+            </div>
             <label className="field max-w-2xl">
               Станция или структура
               <select
@@ -806,7 +842,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 <option value="">Выберите площадку в Jita/Perimeter</option>
                 {production.facilityOptions.map((facility) => (
                   <option key={facility.id} value={facility.id}>
-                    {facility.name} · {facility.systemId}
+                    {facility.name} · {state.systemNames[facility.systemId] ?? facility.systemId} · ID {facility.id}
                   </option>
                 ))}
               </select>
@@ -959,13 +995,14 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
               Сохранить подтверждённый профиль
             </Button>
             {!!production.facilityProfiles.length && (
-              <div className="space-y-2 border-t border-border pt-3">
+              <div aria-label="Сохранённые профили площадок" className="space-y-2 border-t border-border pt-3">
                 <div className="caption">Сохранённые профили</div>
                 {production.facilityProfiles.map((facility) => (
                   <div key={facility.id} className="flex flex-wrap justify-between gap-2 text-sm">
-                    <span>{facility.name} · {facility.services.join(", ") || "услуги не подтверждены"}</span>
+                    <span>{facility.name} · {facility.services.join(", ") || "услуги не подтверждены"} · {state.systemNames[facility.systemId] ?? facility.systemId} · ID {facility.id}</span>
                     <span className="caption">
-                      {facility.accessStatus === "confirmed" ? "доступ подтверждён" : "нужна проверка"}
+                      {facility.accessStatus === "confirmed" ? "доступ подтверждён" : facility.accessStatus === "unavailable" ? "доступ недоступен" : "доступ не подтверждён"}
+                      {facility.profileSource === "manual" ? " · ручное добавление/подтверждение" : " · обнаружено через ESI"}
                       {facility.taxRate ? ` · tax ${(Number(facility.taxRate) * 100).toFixed(2)}%` : " · tax неизвестен"}
                       {facility.reprocessingYieldPercent ? ` · reprocess ${(Number(facility.reprocessingYieldPercent) * 100).toFixed(2)}%` : ""}
                       {facility.reprocessingTaxRate ? ` · reprocess tax ${(Number(facility.reprocessingTaxRate) * 100).toFixed(2)}%` : " · reprocess tax неизвестен"}

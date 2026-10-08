@@ -84,6 +84,17 @@ describe("completed public blueprint contract acquisition matching", () => {
     ]);
   });
 
+  it("counts copies inside one ESI stack using per-copy runs", () => {
+    const stacked = {
+      ...listing,
+      items: [{ ...listing.items[0]!, quantity: 3, runs: 20 }],
+    };
+    expect(groupKnownBpcCopies(stacked)).toMatchObject({
+      bundleRuns: 60,
+      groups: [{ copies: 3, runs: 60 }],
+    });
+  });
+
   it("does not match unaccepted, unfinished, mismatched or ambiguous records", () => {
     expect(matchCompletedBlueprintContractAcquisitions("9001", [{ ...contract, status: "in_progress" }], [listing], [blueprint])).toEqual([]);
     expect(matchCompletedBlueprintContractAcquisitions("9001", [{ ...contract, acceptorId: "9002" }], [listing], [blueprint])).toEqual([]);

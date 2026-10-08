@@ -165,6 +165,12 @@ export const requestSchema = z.discriminatedUnion("kind", [
     typeId: z.string().regex(/^\d+$/),
     inputQuantity: z.number().int().positive().safe(),
   }).strict(),
+  z.object({
+    kind: z.literal("production.facility.register"),
+    locationId: z.string().regex(/^\d{1,20}$/),
+    name: z.string().trim().min(3).max(200),
+    systemId: z.enum(["30000142", "30000144"]),
+  }).strict(),
   z
     .object({
       kind: z.literal("production.facility.save"),
@@ -346,6 +352,7 @@ export interface AppState {
       name: string;
       systemId: string;
       kind: "npc_station" | "structure";
+      profileSource: "esi" | "manual";
       services: string[];
       taxRate: string | null;
       reprocessingTaxRate: string | null;

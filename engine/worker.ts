@@ -190,8 +190,8 @@ function confirmPublicContractBlueprint(request: Extract<AppRequest, { kind: "pr
     items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
   };
   const item = payload.items?.find((entry) => entry.recordId === request.recordId);
-  if (!item || item.typeId !== request.blueprintTypeId || item.quantity !== 1 || item.isBlueprintCopy !== true)
-    throw Error("Копия не совпадает с текущей записью контракта или её количество не равно одной.");
+  if (!item || item.typeId !== request.blueprintTypeId || item.quantity < 1 || item.isBlueprintCopy !== true)
+    throw Error("Копия не совпадает с текущей записью контракта или количество некорректно.");
   if (!(market.data?.manufacturing ?? bundledStatic.manufacturing ?? []).some((recipe) => recipe.blueprintTypeId === item.typeId))
     throw Error("Для этой копии нет рецепта производства в текущем SDE.");
   const confirmedAt = new Date().toISOString();
@@ -1808,7 +1808,7 @@ function productionSummary(): AppState["production"] {
     .all() as { location_id: string; name: string; system_id: string }[];
   const facilityProfiles = store.sql
     .prepare(
-      "SELECT location_id,name,system_id,facility_kind,services_payload,industry_tax,reprocessing_tax,reprocessing_yield_bonus,access_status,observed_at,evidence FROM production_facility_profiles ORDER BY name",
+      "SELECT location_id,name,system_id,facility_kind,services_payload,industry_tax,reprocessing_tax,reprocessing_yield_bonus,access_status,profile_source,observed_at,evidence FROM production_facility_profiles ORDER BY name",
     )
     .all() as {
     location_id: string;
@@ -1820,6 +1820,7 @@ function productionSummary(): AppState["production"] {
     reprocessing_tax: string | null;
     reprocessing_yield_bonus: string | null;
     access_status: "unknown" | "confirmed" | "unavailable";
+    profile_source: "esi" | "manual";
     observed_at: string;
       evidence: string | null;
     }[];
@@ -2485,6 +2486,7 @@ function productionSummary(): AppState["production"] {
       name: facility.name,
       systemId: facility.system_id,
       kind: facility.facility_kind === "unknown" ? "structure" : facility.facility_kind,
+      profileSource: facility.profile_source,
       services: JSON.parse(facility.services_payload) as string[],
       taxRate: facility.industry_tax,
       reprocessingTaxRate: facility.reprocessing_tax,
@@ -4138,6 +4140,26 @@ parentPort!.on(
       if (request.kind === "static.update")
         void market.updateStatic().catch(() => {});
       if (request.kind === "settings.save") store.saveSettings(request.value);
+      if (request.kind === "production.facility.register") {
+        const structureId = BigInt(request.locationId);
+        if (structureId <= 0n || structureId > 9_223_372_036_854_775_807n)
+          throw Error("ID структуры должен быть положительным EVE ID не больше 64-bit signed limit");
+        const productionStatic = config.demo ? bundledStatic : market.data ?? bundledStatic;
+        if (productionStatic.stations.some((station) => station.id === request.locationId))
+          throw Error("Этот ID принадлежит известной станции. Выберите её из списка площадок.");
+        const existing = store.sql.prepare(
+          "SELECT system_id,facility_kind FROM production_facility_profiles WHERE location_id=?",
+        ).get(request.locationId) as { system_id: string; facility_kind: string } | undefined;
+        if (existing) {
+          if (existing.facility_kind !== "structure" || existing.system_id !== request.systemId)
+            throw Error("Этот ID уже зарегистрирован в другой системе или как другой тип площадки.");
+        } else {
+          store.sql.prepare(
+            `INSERT INTO production_facility_profiles(location_id,name,system_id,facility_kind,services_payload,access_status,profile_source,evidence,observed_at)
+             VALUES(?,?,?,'structure','[]','unknown','manual','Ручной кандидат; проверьте расположение, доступ и услуги в игре.',?)`,
+          ).run(request.locationId, request.name, request.systemId, new Date().toISOString());
+        }
+      }
       if (request.kind === "production.facility.save") {
         const productionStatic = config.demo
           ? bundledStatic
