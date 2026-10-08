@@ -47,6 +47,7 @@ test("shell: four tabs, production data panel, restricted preload and settings s
     await expect(
       page.evaluate(() => window.eve.request({ kind: "sql" } as never)),
     ).rejects.toThrow();
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("button", { name: "Настройки", exact: true }).click();
     await expect(
       page.getByRole("region", { name: "Обновления приложения" }),
