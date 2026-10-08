@@ -35,6 +35,8 @@ test("local production tab loads live public ESI data without GitHub or SSO", as
       .toMatch(/Публичные данные ESI обновлены/i);
     await expect(update).toBeEnabled();
     await expect(page.getByText(/Есть обновления рынка и предложений/)).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({ path: "test-results/production-live-market-updates-1280x800.png", fullPage: true });
     await page.getByRole("button", { name: "Показать обновления" }).click();
     await expect(page.getByText(/Есть обновления рынка и предложений/)).toHaveCount(0);
     await expect(page.getByText("Ошибка ESI", { exact: false })).toHaveCount(0);
