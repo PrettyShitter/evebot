@@ -226,6 +226,7 @@ describe("production ESI adapters", () => {
       if (url.pathname === "/contracts/public/items/9901/")
         return response([
           { record_id: 9911, item_id: 99001, type_id: 683, quantity: 2, is_included: true, is_blueprint_copy: true, material_efficiency: 8, time_efficiency: 15, runs: 40 },
+          { record_id: 9914, item_id: 99002, type_id: 683, quantity: -2, is_included: true, is_blueprint_copy: true, material_efficiency: 0, time_efficiency: 0, runs: 20 },
           { record_id: 9912, type_id: 34, quantity: 100, is_included: true },
           { record_id: 9913, type_id: 683, quantity: 1, is_included: false, is_blueprint_copy: true, material_efficiency: 10, time_efficiency: 20, runs: 100 },
         ]);
@@ -253,10 +254,13 @@ describe("production ESI adapters", () => {
       expiresAt: "2027-10-08T00:00:00Z",
       title: "Known copy bundle",
       blueprintOnly: false,
-      includedItemCount: 2,
+      includedItemCount: 3,
       items: [{
         recordId: "9911", itemId: "99001", typeId: "683", quantity: 2, isBlueprintCopy: true,
         materialEfficiency: 8, timeEfficiency: 15, runs: 40,
+      }, {
+        recordId: "9914", itemId: "99002", typeId: "683", quantity: 1, isBlueprintCopy: true,
+        materialEfficiency: 0, timeEfficiency: 0, runs: 20,
       }],
     }]);
   });

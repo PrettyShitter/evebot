@@ -10,8 +10,9 @@ it("stage 1: clean migration, persistence, rollback, backup and restored copy", 
   const path = join(dir, "portfolio.sqlite");
   let store = new Store(path, resolve("db/migrations"));
   try {
-    expect(store.sql.pragma("user_version", { simple: true })).toBe(11);
+    expect(store.sql.pragma("user_version", { simple: true })).toBe(12);
     expect(store.sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_structure_product_profiles'").get()).toEqual({ name: "production_structure_product_profiles" });
+    expect(store.sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_contract_blueprint_confirmations'").get()).toEqual({ name: "production_contract_blueprint_confirmations" });
     store.saveSettings({ ...DEFAULT_SETTINGS, minProfit: "1234567" });
     expect(() =>
       store.sql.transaction(() => {
@@ -69,7 +70,7 @@ it("stage 1: upgrades a version-2 portfolio without losing existing deals or cha
 
   const upgraded = new Store(path, resolve("db/migrations"));
   try {
-    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(11);
+    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(12);
     expect(upgraded.sql.prepare("SELECT id FROM deals").get()).toEqual({
       id: "trade-1",
     });
@@ -82,6 +83,48 @@ it("stage 1: upgrades a version-2 portfolio without losing existing deals or cha
         .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_projects'")
         .get(),
     ).toEqual({ name: "production_projects" });
+    expect(upgraded.sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_contract_blueprint_confirmations'").get()).toEqual({ name: "production_contract_blueprint_confirmations" });
+    expect(upgraded.sql.pragma("foreign_key_check")).toEqual([]);
+  } finally {
+    upgraded.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+it("stage 2: upgrades a populated version-11 database and enforces BPC confirmation integrity", () => {
+  const dir = mkdtempSync(join(tmpdir(), "eve-v11-upgrade-"));
+  const path = join(dir, "portfolio.sqlite");
+  const legacy = new Database(path);
+  try {
+    for (let version = 1; version <= 11; version++) {
+      const name = String(version).padStart(3, "0") + ".sql";
+      legacy.exec(readFileSync(join("db/migrations", name), "utf8"));
+      legacy.pragma("user_version = " + version);
+    }
+    expect(legacy.pragma("user_version", { simple: true })).toBe(11);
+    legacy.prepare("INSERT INTO characters(id,name,status,is_seller) VALUES (?,?,?,?)")
+      .run("9001", "Main", "connected", 1);
+    legacy.prepare("INSERT INTO deals(id,source,destination,status,seller_id,forecast,created_at) VALUES (?,?,?,?,?,?,?)")
+      .run("trade-v11", "600", "601", "OPEN", "9001", "[]", "2026-10-08T00:00:00Z");
+    legacy.prepare("INSERT INTO production_contract_sources(contract_id,region_id,location_id,contract_type,status,price,expires_at,items_payload,observed_at,coverage_status) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .run("contract-v11", "10000002", "60003760", "item_exchange", "outstanding", "1000", "2026-10-09T00:00:00Z", "[]", "2026-10-08T00:00:00Z", "available");
+  } finally {
+    legacy.close();
+  }
+
+  const upgraded = new Store(path, resolve("db/migrations"));
+  try {
+    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(12);
+    expect(upgraded.sql.prepare("SELECT id FROM deals WHERE id='trade-v11'").get()).toEqual({ id: "trade-v11" });
+    expect(upgraded.sql.prepare("SELECT contract_id FROM production_contract_sources WHERE contract_id='contract-v11'").get()).toEqual({ contract_id: "contract-v11" });
+    upgraded.sql.prepare("INSERT INTO production_contract_blueprint_confirmations VALUES (?,?,?,?,?,?,?,?)")
+      .run("contract-v11", "record-1", "683", 10, 20, 1, "Verified in EVE contract", "2026-10-08T01:00:00Z");
+    expect(upgraded.sql.prepare("SELECT blueprint_type_id,runs,evidence FROM production_contract_blueprint_confirmations").get())
+      .toEqual({ blueprint_type_id: "683", runs: 1, evidence: "Verified in EVE contract" });
+    expect(() => upgraded.sql.prepare("INSERT INTO production_contract_blueprint_confirmations VALUES (?,?,?,?,?,?,?,?)")
+      .run("contract-v11", "record-invalid", "683", 11, 20, 1, "out of range", "2026-10-08T01:00:00Z")).toThrow();
+    upgraded.sql.prepare("DELETE FROM production_contract_sources WHERE contract_id=?").run("contract-v11");
+    expect(upgraded.sql.prepare("SELECT count(*) count FROM production_contract_blueprint_confirmations").get()).toEqual({ count: 0 });
+    expect(upgraded.sql.pragma("integrity_check", { simple: true })).toBe("ok");
     expect(upgraded.sql.pragma("foreign_key_check")).toEqual([]);
   } finally {
     upgraded.close();

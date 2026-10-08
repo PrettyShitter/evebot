@@ -139,6 +139,16 @@ export const requestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("market.sync") }).strict(),
   z.object({ kind: z.literal("production.sync") }).strict(),
   z.object({
+    kind: z.literal("production.contract.blueprint.confirm"),
+    contractId: z.string().regex(/^\d+$/),
+    recordId: z.string().regex(/^\d+$/),
+    blueprintTypeId: z.string().regex(/^\d+$/),
+    materialEfficiency: z.number().int().min(0).max(10),
+    timeEfficiency: z.number().int().min(0).max(20),
+    runs: z.number().int().positive().max(1_000_000).safe(),
+    evidence: z.string().trim().min(8).max(500),
+  }).strict(),
+  z.object({
     kind: z.literal("production.blueprint.cost.confirm"),
     blueprintItemId: z.string().regex(/^\d+$/),
     transactionId: z.string().regex(/^\d+$/),
@@ -323,7 +333,7 @@ export interface AppState {
       blueprintOnly: boolean;
       includedItemCount: number;
       manufacturingEligibility: "candidate" | "mixed_contract" | "multiple_copies" | "unknown_attributes" | "unknown_recipe";
-      blueprints: { typeId: string; typeName: string; quantity: number; materialEfficiency: number | null; timeEfficiency: number | null; runs: number | null; attributesKnown: boolean }[];
+      blueprints: { recordId: string; typeId: string; typeName: string; quantity: number; materialEfficiency: number | null; timeEfficiency: number | null; runs: number | null; attributesKnown: boolean; attributesSource: "esi" | "manual" | "conflict" | "unknown"; confirmedAt: string | null; evidence: string | null }[];
     }[];
     syncedAt: string | null;
     publicSyncedAt: string | null;

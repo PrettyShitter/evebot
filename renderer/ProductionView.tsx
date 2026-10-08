@@ -68,6 +68,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const [manufacturingRuns, setManufacturingRuns] = useState<Record<string, string>>({});
   const [reprocessingQuantities, setReprocessingQuantities] = useState<Record<string, string>>({});
   const [showAllBlueprintContracts, setShowAllBlueprintContracts] = useState(false);
+  const [contractBpcConfirmations, setContractBpcConfirmations] = useState<Record<string, { me: string; te: string; runs: string; evidence: string }>>({});
   const [projectFilter, setProjectFilter] = useState<"all" | "pinned" | "active" | "completed">("all");
   const [reprocessOutputs, setReprocessOutputs] = useState<Record<string, Record<string, string>>>({});
   const [reprocessInputs, setReprocessInputs] = useState<Record<string, string>>({});
@@ -99,6 +100,10 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const visibleBlueprintContracts = showAllBlueprintContracts
     ? production.blueprintContracts
     : production.blueprintContracts.slice(0, 5);
+  const bpcItemsNeedConfirmation = production.blueprintContracts.reduce(
+    (count, contract) => count + contract.blueprints.filter((blueprint) => !blueprint.attributesKnown && blueprint.quantity === 1).length,
+    0,
+  );
   const visibleProjects = production.projects.filter((project) => {
     if (projectFilter === "pinned") return project.status === "pinned";
     if (projectFilter === "active") return !["pinned", "completed", "cancelled"].includes(project.status);
@@ -333,7 +338,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="font-medium">BPC в публичных контрактах Jita / Perimeter</h2>
-                <p className="caption mt-1">Показываем реальные атрибуты из ESI. Цена относится ко всему набору; эти кандидаты пока не включаются в исполняемые расчёты и проекты.</p>
+                <p className="caption mt-1">Берём ME/TE/runs из ESI, если они доступны. Неизвестные атрибуты можно сверить в клиенте EVE и подтвердить вручную; это не резервирует контракт и не подтверждает его покупку.</p>
               </div>
               <span className="badge">
                 {production.contractCoverage.fetchedContracts}/{production.contractCoverage.candidateContracts} проверено
@@ -348,6 +353,9 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
             {production.contractCoverage.itemErrors > 0 && (
               <p className="caption">Не удалось прочитать состав {production.contractCoverage.itemErrors} контрактов.</p>
             )}
+            {bpcItemsNeedConfirmation > 0 && (
+              <p className="caption rounded border border-amber-700/50 p-3">{bpcItemsNeedConfirmation} копий без атрибутов ESI пока исключены из расчётов. Подтверждение доступно только для свежих контрактов и отдельных копий с количеством 1.</p>
+            )}
             {!production.blueprintContracts.length ? (
               <p className="caption">Копий чертежей с доступными атрибутами пока не найдено. Контрактные чертежи ещё не включены в готовые расчёты партий.</p>
             ) : (
@@ -359,12 +367,38 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                       <div className="tabular-nums">{isk(contract.price)} · до {timestamp(contract.expiresAt)}</div>
                     </div>
                     <div className="mt-2 space-y-1">
-                      {contract.blueprints.map((blueprint) => (
-                        <div key={`${contract.contractId}:${blueprint.typeId}`} className="caption flex flex-wrap justify-between gap-2">
-                          <span><CopyName name={blueprint.typeName} onCopy={copyName} /> × {blueprint.quantity} BPC</span>
-                          <span>{blueprint.attributesKnown ? `ME ${blueprint.materialEfficiency} · TE ${blueprint.timeEfficiency} · ${blueprint.runs} runs` : "Атрибуты копии неизвестны — нужна проверка в игре"}</span>
-                        </div>
-                      ))}
+                      {contract.blueprints.map((blueprint) => {
+                        const key = `${contract.contractId}:${blueprint.recordId}`;
+                        const values = contractBpcConfirmations[key] ?? { me: "", te: "", runs: "", evidence: "" };
+                        const valid = [values.me, values.te, values.runs].every((value) => value.trim() !== "" && Number.isInteger(Number(value))) && Number(values.me) >= 0 && Number(values.me) <= 10 && Number(values.te) >= 0 && Number(values.te) <= 20 && Number(values.runs) > 0 && values.evidence.trim().length >= 8;
+                        return (
+                          <div key={key} className="caption rounded border border-border/60 p-2">
+                            <div className="flex flex-wrap justify-between gap-2">
+                              <span><CopyName name={blueprint.typeName} onCopy={copyName} /> · {blueprint.quantity} BPC · запись #{blueprint.recordId}</span>
+                              <span>{blueprint.attributesKnown ? `ME ${blueprint.materialEfficiency} · TE ${blueprint.timeEfficiency} · ${blueprint.runs} runs${blueprint.attributesSource === "manual" ? ` · вручную ${timestamp(blueprint.confirmedAt)}: ${blueprint.evidence}` : blueprint.attributesSource === "conflict" ? ` · ESI расходится с ручной сверкой от ${timestamp(blueprint.confirmedAt)}; расчёт использует ESI` : " · данные ESI"}` : "Атрибуты неизвестны — требуется сверка в игре"}</span>
+                            </div>
+                            {!blueprint.attributesKnown && blueprint.quantity === 1 && (
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                <Input aria-label={`ME контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="10" step="1" placeholder="ME 0–10" value={values.me} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, me: event.target.value } }))} />
+                                <Input aria-label={`TE контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="0" max="20" step="1" placeholder="TE 0–20" value={values.te} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, te: event.target.value } }))} />
+                                <Input aria-label={`Прогоны контракта ${contract.contractId}, запись ${blueprint.recordId}`} type="number" min="1" step="1" placeholder="Осталось прогонов" value={values.runs} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, runs: event.target.value } }))} />
+                                <Input aria-label={`Свидетельство контракта ${contract.contractId}, запись ${blueprint.recordId}`} placeholder="Где проверено в EVE" value={values.evidence} onChange={(event) => setContractBpcConfirmations((current) => ({ ...current, [key]: { ...values, evidence: event.target.value } }))} />
+                                <div className="caption sm:col-span-2 lg:col-span-4">Откройте контракт в игре и сверьте ME, TE и оставшиеся прогоны этой копии. Подтверждение относится только к записи #{blueprint.recordId}; цена всего набора всё равно нужна для покупки.</div>
+                                <Button type="button" size="sm" disabled={!valid || busy} onClick={() => void request({
+                                  kind: "production.contract.blueprint.confirm",
+                                  contractId: contract.contractId,
+                                  recordId: blueprint.recordId,
+                                  blueprintTypeId: blueprint.typeId,
+                                  materialEfficiency: Number(values.me),
+                                  timeEfficiency: Number(values.te),
+                                  runs: Number(values.runs),
+                                  evidence: values.evidence.trim(),
+                                })}>Подтвердить атрибуты из игры</Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                     <div className="caption mt-2">
                       Контракт #{contract.contractId}; {contract.includedItemCount} включённых позиций. {contract.blueprintOnly ? "Только чертежи." : "Смешанный набор: расчёт использует полную цену контракта и не засчитывает остальные предметы как выручку."}

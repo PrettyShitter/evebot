@@ -13,7 +13,7 @@ import { dirname, join } from "node:path";
 import { settings } from "./schema";
 import type { Settings } from "../shared/contracts/app";
 import { DEFAULT_SETTINGS } from "../shared/contracts/app";
-const CURRENT_SCHEMA_VERSION = 11;
+const CURRENT_SCHEMA_VERSION = 12;
 export class Store {
   readonly sql: Database.Database;
   readonly orm;

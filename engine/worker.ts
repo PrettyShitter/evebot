@@ -51,6 +51,7 @@ import type {
 } from "./production/esi";
 import {
   requestSchema,
+  type AppRequest,
   type AppState,
   PRODUCTION_SCOPES,
   OPTIONAL_STRUCTURE_SCOPES,
@@ -136,6 +137,71 @@ function persistPublicBlueprintContracts(publicData: PublicProductionData) {
       }
     }
   })();
+}
+function applyPublicBlueprintConfirmations(
+  contractId: string,
+  items: PublicProductionData["publicBlueprintContracts"][number]["items"],
+) {
+  const confirmations = store.sql.prepare(
+    "SELECT record_id,blueprint_type_id,material_efficiency,time_efficiency,runs,evidence,confirmed_at FROM production_contract_blueprint_confirmations WHERE contract_id=?",
+  ).all(contractId) as {
+    record_id: string;
+    blueprint_type_id: string;
+    material_efficiency: number;
+    time_efficiency: number;
+    runs: number;
+    evidence: string;
+    confirmed_at: string;
+  }[];
+  const byRecordId = new Map(confirmations.map((row) => [row.record_id, row]));
+  return items.map((item) => {
+    const confirmation = byRecordId.get(item.recordId);
+    if (!confirmation || item.typeId !== confirmation.blueprint_type_id || item.isBlueprintCopy !== true)
+      return { ...item, attributesSource: item.isBlueprintCopy === true && item.materialEfficiency !== null && item.timeEfficiency !== null && item.runs !== null ? "esi" as const : "unknown" as const, confirmedAt: null, evidence: null };
+    const hasEsiAttributes = item.materialEfficiency !== null && item.timeEfficiency !== null && item.runs !== null;
+    if (hasEsiAttributes) {
+      const conflict = item.materialEfficiency !== confirmation.material_efficiency ||
+        item.timeEfficiency !== confirmation.time_efficiency || item.runs !== confirmation.runs;
+      return { ...item, attributesSource: conflict ? "conflict" as const : "esi" as const, confirmedAt: confirmation.confirmed_at, evidence: confirmation.evidence };
+    }
+    return {
+      ...item,
+      materialEfficiency: confirmation.material_efficiency,
+      timeEfficiency: confirmation.time_efficiency,
+      runs: confirmation.runs,
+      attributesSource: "manual" as const,
+      confirmedAt: confirmation.confirmed_at,
+      evidence: confirmation.evidence,
+    };
+  });
+}
+function confirmPublicContractBlueprint(request: Extract<AppRequest, { kind: "production.contract.blueprint.confirm" }>) {
+  const contract = store.sql.prepare(
+    "SELECT location_id,expires_at,items_payload,observed_at,coverage_status FROM production_contract_sources WHERE contract_id=?",
+  ).get(request.contractId) as { location_id: string | null; expires_at: string | null; items_payload: string | null; observed_at: string; coverage_status: string } | undefined;
+  if (!contract || contract.coverage_status !== "available" || !contract.location_id)
+    throw Error("Контракт больше не подтверждён текущим снимком ESI. Обновите данные контрактов.");
+  if (!contract.expires_at || Date.parse(contract.expires_at) <= Date.now())
+    throw Error("Срок контракта истёк; обновите список перед подтверждением.");
+  if (Date.now() - Date.parse(contract.observed_at) > 60 * 60 * 1000)
+    throw Error("Снимок контракта старше часа. Обновите данные перед ручным подтверждением.");
+  const payload = JSON.parse(contract.items_payload ?? "{}") as {
+    items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
+  };
+  const item = payload.items?.find((entry) => entry.recordId === request.recordId);
+  if (!item || item.typeId !== request.blueprintTypeId || item.quantity !== 1 || item.isBlueprintCopy !== true)
+    throw Error("Копия не совпадает с текущей записью контракта или её количество не равно одной.");
+  if (!(market.data?.manufacturing ?? bundledStatic.manufacturing ?? []).some((recipe) => recipe.blueprintTypeId === item.typeId))
+    throw Error("Для этой копии нет рецепта производства в текущем SDE.");
+  const confirmedAt = new Date().toISOString();
+  store.sql.prepare(
+    `INSERT INTO production_contract_blueprint_confirmations(contract_id,record_id,blueprint_type_id,material_efficiency,time_efficiency,runs,evidence,confirmed_at)
+     VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(contract_id,record_id) DO UPDATE SET blueprint_type_id=excluded.blueprint_type_id,
+       material_efficiency=excluded.material_efficiency,time_efficiency=excluded.time_efficiency,
+       runs=excluded.runs,evidence=excluded.evidence,confirmed_at=excluded.confirmed_at`,
+  ).run(request.contractId, request.recordId, request.blueprintTypeId, request.materialEfficiency,
+    request.timeEfficiency, request.runs, request.evidence, confirmedAt);
 }
 let cached: Opportunity[] = [];
 let prepared: Opportunity[] = [];
@@ -615,7 +681,7 @@ function manufacturingOffers(
     const payload = JSON.parse(contract.items_payload ?? "{}") as {
       title?: string; blueprintOnly?: boolean; includedItemCount?: number; items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
     };
-    const items = payload.items ?? [];
+    const items = applyPublicBlueprintConfirmations(contract.contract_id, payload.items ?? []);
     const bundle = groupKnownBpcCopies({
       contractId: contract.contract_id,
       locationId: contract.location_id ?? "",
@@ -1714,23 +1780,19 @@ function productionSummary(): AppState["production"] {
         includedItemCount?: number;
         items?: PublicProductionData["publicBlueprintContracts"][number]["items"];
       };
-      const items = payload.items ?? [];
-      const groupedBlueprints = new Map<string, (typeof items)[number]>();
-      for (const item of items) {
-        const key = [item.typeId, item.isBlueprintCopy, item.materialEfficiency, item.timeEfficiency, item.runs].join(":");
-        const current = groupedBlueprints.get(key);
-        const count = item.quantity < 1 ? 1 : item.quantity;
-        if (current) current.quantity += count;
-        else groupedBlueprints.set(key, { ...item, quantity: count });
-      }
-      const blueprints = [...groupedBlueprints.values()].map((item) => ({
+      const items = applyPublicBlueprintConfirmations(contract.contract_id, payload.items ?? []);
+      const blueprints = items.map((item) => ({
+        recordId: item.recordId,
         typeId: item.typeId,
         typeName: typeById.get(item.typeId)?.name ?? `Type ${item.typeId}`,
-        quantity: item.quantity,
+        quantity: item.quantity < 1 ? 1 : item.quantity,
         materialEfficiency: item.materialEfficiency,
         timeEfficiency: item.timeEfficiency,
         runs: item.runs,
         attributesKnown: item.isBlueprintCopy === true && item.materialEfficiency !== null && item.timeEfficiency !== null && item.runs !== null && item.runs > 0,
+        attributesSource: item.attributesSource,
+        confirmedAt: item.confirmedAt,
+        evidence: item.evidence,
       }));
       const blueprintOnly = payload.blueprintOnly === true;
       const knownCopies = knownBpcCopies({
@@ -3647,7 +3709,7 @@ parentPort!.on(
                   locationId: row.location_id,
                   price: row.price,
                   blueprintOnly: payload.blueprintOnly === true,
-                  items: payload.items,
+                  items: applyPublicBlueprintConfirmations(row.contract_id, payload.items),
                 }] as const]
               : [];
           } catch {
@@ -3660,7 +3722,7 @@ parentPort!.on(
             locationId: contract.locationId,
             price: contract.price,
             blueprintOnly: contract.blueprintOnly,
-            items: contract.items,
+            items: applyPublicBlueprintConfirmations(contract.contractId, contract.items),
           });
         const acquiredBlueprints = matchCompletedBlueprintContractAcquisitions(
           characterId,
@@ -4102,6 +4164,8 @@ parentPort!.on(
       }
       if (request.kind === "production.offer.quote")
         quoteProductionOffer(request.blueprintItemId, request.facilityId, request.runs);
+      if (request.kind === "production.contract.blueprint.confirm")
+        confirmPublicContractBlueprint(request);
       if (request.kind === "production.blueprint.cost.confirm")
         confirmBlueprintAcquisitionCost(request.blueprintItemId, request.transactionId);
       if (request.kind === "production.reprocessing.quote")

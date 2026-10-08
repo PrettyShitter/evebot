@@ -167,7 +167,7 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       contractId: "88001",
       regionId: "10000002",
       locationId: "60003760",
-      price: "1000000",
+      price: "1000",
       expiresAt: "2027-10-08T00:00:00Z",
       title: "Integration BPC",
       blueprintOnly: true,
@@ -261,8 +261,70 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
         blueprints: [expect.objectContaining({ typeId: "683", attributesKnown: false })],
       }), expect.objectContaining({ contractId: "88003", manufacturingEligibility: "candidate" }),
       expect.objectContaining({ contractId: "88005", blueprintOnly: false, includedItemCount: 2, manufacturingEligibility: "candidate" }),
-      expect.objectContaining({ contractId: "88006", blueprintOnly: true, includedItemCount: 3, manufacturingEligibility: "candidate", blueprints: [expect.objectContaining({ quantity: 3, attributesKnown: true })] })]),
+      expect.objectContaining({ contractId: "88006", blueprintOnly: true, includedItemCount: 3, manufacturingEligibility: "candidate", blueprints: expect.arrayContaining([expect.objectContaining({ recordId: "88007", quantity: 1, attributesKnown: true })]) })]),
     });
+    const confirmedPublicBpc = await request(undefined, {
+      kind: "production.contract.blueprint.confirm",
+      contractId: "88001",
+      recordId: "88002",
+      blueprintTypeId: "683",
+      materialEfficiency: 0,
+      timeEfficiency: 0,
+      runs: 2,
+      evidence: "Проверено в контракте в EVE",
+    });
+    expect(confirmedPublicBpc.error).toBeUndefined();
+    expect(confirmedPublicBpc.value?.production.blueprintContracts).toContainEqual(expect.objectContaining({
+      contractId: "88001",
+      manufacturingEligibility: "candidate",
+      blueprints: [expect.objectContaining({
+        recordId: "88002", attributesKnown: true, attributesSource: "manual",
+        materialEfficiency: 0, timeEfficiency: 0, runs: 2,
+        confirmedAt: expect.any(String), evidence: "Проверено в контракте в EVE",
+      })],
+    }));
+    const staleTestDb = new Store(dbPath, resolve("db/migrations"));
+    staleTestDb.sql.prepare("UPDATE production_contract_sources SET observed_at=? WHERE contract_id=?")
+      .run(new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), "88001");
+    const stalePublicBpc = await request(undefined, {
+      kind: "production.contract.blueprint.confirm",
+      contractId: "88001",
+      recordId: "88002",
+      blueprintTypeId: "683",
+      materialEfficiency: 1,
+      timeEfficiency: 0,
+      runs: 2,
+      evidence: "Повторно сверено в клиенте EVE",
+    });
+    expect(stalePublicBpc.error).toContain("старше часа");
+    staleTestDb.sql.prepare("UPDATE production_contract_sources SET observed_at=? WHERE contract_id=?").run(at, "88001");
+    staleTestDb.close();
+    const mismatchedPublicBpc = await request(undefined, {
+      kind: "production.contract.blueprint.confirm",
+      contractId: "88001",
+      recordId: "99999",
+      blueprintTypeId: "683",
+      materialEfficiency: 0,
+      timeEfficiency: 0,
+      runs: 2,
+      evidence: "Проверено в контракте в EVE",
+    });
+    expect(mismatchedPublicBpc.error).toContain("не совпадает");
+    const publicDataConflict: PublicProductionData = {
+      ...publicData,
+      publicBlueprintContracts: publicData.publicBlueprintContracts.map((contract) => contract.contractId === "88001"
+        ? { ...contract, items: contract.items.map((item) => ({ ...item, materialEfficiency: 1, timeEfficiency: 0, runs: 2 })) }
+        : contract),
+    };
+    const conflictedPublicBpc = await request({
+      kind: "production-data", characterId: "9001", profile, own: beforeBpcPurchase, publicData: publicDataConflict,
+    });
+    expect(conflictedPublicBpc.value?.production.blueprintContracts).toContainEqual(expect.objectContaining({
+      contractId: "88001",
+      blueprints: [expect.objectContaining({
+        materialEfficiency: 1, attributesSource: "conflict", evidence: "Проверено в контракте в EVE",
+      })],
+    }));
     const accessLost = await request({
       kind: "production-data", characterId: "9001", profile, own, publicData: acquiredContractRemovedFromPublic,
       structureMarkets: [{
@@ -347,8 +409,11 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       evidence: "Fixture-only confirmed manufacturing profile",
     });
     expect(confirmedNpc.error).toBeUndefined();
-    expect(confirmedNpc.value?.production.contractOffers).toHaveLength(3);
-    expect(confirmedNpc.value?.production.contractOffers[0]).toMatchObject({
+    expect(confirmedNpc.value?.production.contractOffers).toHaveLength(4);
+    expect(confirmedNpc.value?.production.contractOffers).toContainEqual(expect.objectContaining({
+      contractId: "88001", contractPrice: "1000", blueprintCopies: 1, bundleRuns: 2,
+    }));
+    expect(confirmedNpc.value?.production.contractOffers.find((offer) => offer.contractId === "88003")).toMatchObject({
       contractId: "88003",
       runs: 1,
       contractPrice: "1000",

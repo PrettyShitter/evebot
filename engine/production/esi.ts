@@ -400,7 +400,9 @@ export async function fetchPublicProductionData(
           recordId: item.record_id,
           ...(item.item_id ? { itemId: item.item_id } : {}),
           typeId: item.type_id,
-          quantity: item.quantity,
+          // ESI's contract quantity sentinel -2 identifies one blueprint
+          // copy; represent it as one physical BPC in our run accounting.
+          quantity: item.is_blueprint_copy === true && item.quantity === -2 ? 1 : item.quantity,
           isBlueprintCopy: item.is_blueprint_copy ?? null,
           materialEfficiency: item.material_efficiency ?? null,
           timeEfficiency: item.time_efficiency ?? null,
