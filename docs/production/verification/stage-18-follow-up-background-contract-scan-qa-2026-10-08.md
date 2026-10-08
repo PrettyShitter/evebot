@@ -14,7 +14,7 @@ Date: 2026-10-08 (Asia/Ho_Chi_Minh).
 | Check | Result |
 |---|---|
 | `pnpm verify:all` | PASS — lint, typecheck, 105 integration tests, 38 unit tests, build, and 4 regular desktop E2E tests. The performance and live-ESI specs are opt-in and are run separately below. |
-| `EVE_BENCHMARK=1 pnpm exec playwright test tests/e2e/performance.spec.ts` | PASS — 643/643 eligible market BPOs and 24/24 synthetic BPC groups scanned in 33.7 s; 26 production offers; filter request 13 ms; maximum renderer timer gap 16.8 ms. The fixture uses a saved market snapshot and synthetic local account data. |
+| `EVE_BENCHMARK=1 pnpm exec playwright test tests/e2e/performance.spec.ts` | PASS — 643/643 eligible market BPOs and 24/24 synthetic BPC groups scanned in 33.9 s; 26 production offers; filter request 13 ms; maximum renderer timer gap 18 ms. The fixture uses a saved market snapshot and synthetic local account data. |
 | `pnpm test:e2e:live` | PASS — non-DEMO Electron application fetched live public ESI data without GitHub updates or private character authorization (13.2 s). |
 | macOS arm64 `electron-builder --mac dir --arm64 --publish never` + `pnpm test:e2e:packaged:mac` | PASS — packaged non-DEMO application fetched live public ESI data (12.4 s). The bundle is ad-hoc signed, not notarized. |
 | `node scripts/packaged-smoke.mjs` | PASS — packaged bundle integrity, startup, worker/native SQLite/migrations, settings write, tray hide/show, and restart persistence. |
