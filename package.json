@@ -1,6 +1,6 @@
 {
   "name": "eve-trader",
-  "version": "0.1.29",
+  "version": "0.1.30",
   "private": true,
   "description": "Локальный помощник межстанционной торговли EVE Online",
   "author": "EVE Trader",
