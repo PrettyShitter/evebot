@@ -46,6 +46,13 @@ test("unknown public BPC attributes can be confirmed in the desktop UI", async (
     const panel = page.locator('[aria-label="Публичные контракты с копиями чертежей"]');
     const row = panel.locator("article").filter({ hasText: `#${contractId}` });
     await expect(row).toContainText("Атрибуты неизвестны");
+    const copyButton = row.locator('button[aria-label^="Скопировать "]').first();
+    const copiedName = (await copyButton.getAttribute("aria-label"))?.replace(/^Скопировать /, "");
+    expect(copiedName).toBeTruthy();
+    await copyButton.click();
+    await expect(page.locator('[role="status"]').filter({ hasText: `Скопировано: ${copiedName}` })).toBeVisible();
+    await expect(row).toContainText("Атрибуты неизвестны");
+    await expect(row.getByRole("spinbutton", { name: `ME контракта ${contractId}, запись 9988776656` })).toBeVisible();
     await row.getByRole("spinbutton", { name: `ME контракта ${contractId}, запись 9988776656` }).fill("0");
     await row.getByRole("spinbutton", { name: `TE контракта ${contractId}, запись 9988776656` }).fill("0");
     await row.getByRole("spinbutton", { name: `Прогоны контракта ${contractId}, запись 9988776656` }).fill("2");
