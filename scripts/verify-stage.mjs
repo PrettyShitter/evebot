@@ -33,6 +33,6 @@ for (const args of commands) {
   }
 }
 const scope = `docs/verification/scope-${String(stage).padStart(2, "0")}.md`;
-text += `## Область проверки\n\n${existsSync(scope) ? `См. [покрытие и ограничения](./scope-${String(stage).padStart(2, "0")}.md).` : "Наличие PASS у команд не подтверждает выполнение всех требований этапа. Покрытие требует отдельного отчёта."}\n\nLive SSO: BLOCKED — нет авторизации пользователя. Windows smoke: BLOCKED — нет Windows runner в локальной сессии.\n`;
+text += `## Область проверки\n\n${existsSync(scope) ? `См. [покрытие и ограничения](./scope-${String(stage).padStart(2, "0")}.md).` : "Наличие PASS у команд не подтверждает выполнение всех требований этапа. Покрытие требует отдельного отчёта."}\n\nПриватный live SSO: BLOCKED до согласия пользователя. Проверка сборки и packaged smoke для каждой платформы подтверждается соответствующей задачей GitHub Actions; локальный прогон не заявляет кроссплатформенную проверку.\n`;
 writeFileSync(`${dir}/stage-${String(stage).padStart(2, "0")}.md`, text);
 process.exit(failed ? 1 : 0);

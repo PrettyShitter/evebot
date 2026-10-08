@@ -1,6 +1,6 @@
 # Stage 15 follow-up — Alpha manufacturing tax and current-app QA
 
-Date: 2026-10-08 (Asia/Ho_Chi_Minh). The manufacturing estimator now follows CCP's February 2026 support article's 2% additional Alpha industry tax, instead of the older 0.25% Viridian value. This makes predicted fees higher until the user's in-game Industry preview confirms the current character-specific fee.
+Date: 2026-10-08 (Asia/Ho_Chi_Minh). The manufacturing estimator follows CCP's February 2026 support article's 2% additional Alpha industry tax, instead of the older 0.25% value in the 2023 Viridian changes. CCP's current [Alpha and Omega support article](https://support.eveonline.com/hc/en-us/articles/213020969-Alpha-and-Omega-Clone) explicitly says the additional industry tax is 2%; its current [Manufacturing article](https://support.eveonline.com/hc/en-us/articles/203210292-Manufacturing) confirms facility cost is part of starting a job. This establishes the current published baseline, while the user's actual Industry preview is still needed to validate the character and facility-specific total.
 
 ## Changes
 
