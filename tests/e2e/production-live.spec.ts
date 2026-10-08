@@ -30,6 +30,13 @@ test("local production tab loads live public ESI data without GitHub or SSO", as
       .toMatch(/Публичные данные ESI обновлены|обновление ESI не удалось/i);
     await expect(syncStatus).toContainText("Публичные данные ESI обновлены");
     await expect(update).toBeEnabled();
+    await update.click();
+    await expect.poll(async () => syncStatus.innerText(), { timeout: 120_000 })
+      .toMatch(/Публичные данные ESI обновлены/i);
+    await expect(update).toBeEnabled();
+    await expect(page.getByText(/Есть обновления рынка и предложений/)).toBeVisible();
+    await page.getByRole("button", { name: "Показать обновления" }).click();
+    await expect(page.getByText(/Есть обновления рынка и предложений/)).toHaveCount(0);
     await expect(page.getByText("Ошибка ESI", { exact: false })).toHaveCount(0);
     const facilityMetric = page.getByText("Площадки в Jita/Perimeter").locator("..");
     await expect(facilityMetric).toContainText(/[1-9][\d,]*/);

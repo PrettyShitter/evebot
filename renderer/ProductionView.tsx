@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
   Boxes,
@@ -7,6 +7,7 @@ import {
   Settings2,
 } from "lucide-react";
 import type { AppRequest, AppState } from "../shared/contracts/app";
+import { preserveOfferOrder } from "./production-order";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
@@ -75,6 +76,10 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const [reprocessFees, setReprocessFees] = useState<Record<string, string>>({});
   const [reprocessEvidence, setReprocessEvidence] = useState<Record<string, string>>({});
   const [copyMessage, setCopyMessage] = useState("");
+  const [acknowledgedPublicSyncAt, setAcknowledgedPublicSyncAt] = useState(state.production.publicSyncedAt);
+  const sortOrder = useRef<Record<"manufacturing" | "contracts" | "reprocessing", string[]>>({
+    manufacturing: [], contracts: [], reprocessing: [],
+  });
   const [facilityId, setFacilityId] = useState("");
   const [manufacturing, setManufacturing] = useState(true);
   const [reprocessing, setReprocessing] = useState(false);
@@ -99,6 +104,12 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
   const [activityFilter, setActivityFilter] = useState<"all" | "manufacturing" | "reprocessing">("all");
   const [sortBy, setSortBy] = useState<"profit" | "roi" | "slotHour">("profit");
   const production = state.production;
+  useEffect(() => {
+    if (!acknowledgedPublicSyncAt && production.publicSyncedAt)
+      setAcknowledgedPublicSyncAt(production.publicSyncedAt);
+  }, [acknowledgedPublicSyncAt, production.publicSyncedAt]);
+  const hasMarketUpdates = !!acknowledgedPublicSyncAt && !!production.publicSyncedAt &&
+    production.publicSyncedAt !== acknowledgedPublicSyncAt;
   const isSyncing = busy || production.syncing;
   const visibleBlueprintContracts = showAllBlueprintContracts
     ? production.blueprintContracts
@@ -159,6 +170,14 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
       }
       return profit(right) - profit(left);
     });
+  const retainOrder = <T extends { id: string }>(offers: T[], group: keyof typeof sortOrder.current) => {
+    if (!hasMarketUpdates) {
+      sortOrder.current[group] = offers.map((offer) => offer.id);
+      return offers;
+    }
+    return preserveOfferOrder(offers, sortOrder.current[group]);
+  };
+  const orderedManufacturingOffers = retainOrder(visibleManufacturingOffers, "manufacturing");
   const visibleContractOffers = [...production.contractOffers]
     .filter((offer) => costLimit === null || Number(offer.estimate.cashRequired ?? Infinity) <= costLimit)
     .filter((offer) => profitFloor === null || Number(offer.estimate.firstCycleProfit[exitBasis] ?? -Infinity) >= profitFloor)
@@ -173,6 +192,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
       }
       return Number(right.estimate.firstCycleProfit[exitBasis] ?? -Infinity) - Number(left.estimate.firstCycleProfit[exitBasis] ?? -Infinity);
     });
+  const orderedContractOffers = retainOrder(visibleContractOffers, "contracts");
   const visibleReprocessingOffers = [...production.reprocessingOffers]
     .filter((offer) => costLimit === null || Number(offer.estimate.totalCost ?? Infinity) <= costLimit)
     .filter((offer) => profitFloor === null || Number(offer.estimate[exitBasis].netProfit ?? -Infinity) >= profitFloor)
@@ -181,6 +201,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
       if (sortBy === "roi") return Number(right.estimate[exitBasis].roi ?? -Infinity) - Number(left.estimate[exitBasis].roi ?? -Infinity);
       return Number(right.estimate[exitBasis].netProfit ?? -Infinity) - Number(left.estimate[exitBasis].netProfit ?? -Infinity);
     });
+  const orderedReprocessingOffers = retainOrder(visibleReprocessingOffers, "reprocessing");
   return (
     <section className="space-y-5" aria-label="Производство">
       <header className="panel flex flex-wrap items-center justify-between gap-4">
@@ -218,6 +239,12 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
               ? `Публичные данные ESI обновлены ${timestamp(production.publicSyncedAt)}`
               : "Публичные данные ESI ещё не загружены"}
       </p>
+      {hasMarketUpdates && section === "opportunities" && <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/30 p-3" role="status">
+        <span className="caption">Есть обновления рынка и предложений. Существующие строки сохраняют порядок; новые предложения добавлены в конец списка.</span>
+        <Button size="sm" variant="outline" onClick={() => setAcknowledgedPublicSyncAt(production.publicSyncedAt)}>
+          Показать обновления
+        </Button>
+      </div>}
       {copyMessage && <p className="caption" role="status">{copyMessage}</p>}
 
       <div className="panel flex items-start gap-3" role="status">
@@ -441,10 +468,10 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 <h2 className="font-medium">Производство с покупкой BPC-контракта</h2>
                 <p className="caption mt-1">Для набора требуется вся сумма контракта. Себестоимость выбранной партии получает долю цены BPC по прогонам, оставшиеся копии и их стоимость сохраняются. Покупку нужно выполнить вручную; после синхронизации принадлежащие BPC появятся среди обычных предложений.</p>
               </div>
-              <span className="badge">{visibleContractOffers.length} из {production.contractOffers.length}</span>
+              <span className="badge">{orderedContractOffers.length} из {production.contractOffers.length}</span>
             </div>
             {production.contractCandidatesTotal > 0 && <p className="caption" role="status">{production.contractScanComplete ? "Проверка BPC-контрактов завершена" : "В фоне проверяются BPC-контракты"}: обработано {production.contractCandidatesScanned} из {production.contractCandidatesTotal}.</p>}
-            {!visibleContractOffers.length ? (
+            {!orderedContractOffers.length ? (
               <p className="caption rounded border border-border p-3">{!production.contractScanComplete ? "Список контрактов ещё рассчитывается. Уже найденные предложения появятся здесь автоматически." : "Нет контрактов с известными ME/TE/runs, подходящим рецептом SDE и подтверждённой производственной станцией."}</p>
             ) : (
               <div className="overflow-x-auto">
@@ -453,7 +480,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                     <th className="p-2">Результат / контракт</th><th className="p-2 text-right">Прогоны / объём</th>
                     <th className="p-2 text-right">Вложения</th><th className="p-2 text-right">Сразу</th><th className="p-2 text-right">Sell-order</th>
                   </tr></thead>
-                  <tbody>{visibleContractOffers.map((offer) => (
+                  <tbody>{orderedContractOffers.map((offer) => (
                     <tr key={offer.id} className="border-b border-border align-top">
                       <td className="p-2"><CopyName name={offer.itemName} onCopy={copyName} />
                         <div className="caption mt-1">{offer.contractTitle} · {offer.pickupLocation} · контракт проверен {timestamp(offer.contractObservedAt)} · рынок {timestamp(offer.observedAt)} · до {timestamp(offer.expiresAt)}</div>
@@ -537,14 +564,14 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                   Учитываются имеющиеся чертежи и одиночные sell-ордера BPO на станциях хабов. Для BPO покупки отдельно показаны денежный результат первого цикла и окупаемость; купить и синхронизировать оригинал нужно в игре.
                 </p>
               </div>
-              <span className="badge">{visibleManufacturingOffers.length} из {production.offers.length} · только полный стакан</span>
+              <span className="badge">{orderedManufacturingOffers.length} из {production.offers.length} · только полный стакан</span>
             </div>
             {production.marketBpoCandidatesTotal > 0 && <p className="caption" role="status">{production.marketBpoScanComplete ? "Анализ рыночных BPO завершён" : "В фоне анализируются рыночные BPO"}: проверено {production.marketBpoCandidatesScanned} из {production.marketBpoCandidatesTotal}.</p>}
-            {!visibleManufacturingOffers.length && production.offers.length ? (
+            {!orderedManufacturingOffers.length && production.offers.length ? (
               <p className="caption rounded-md border border-border p-4 text-center">
                 Предложения скрыты текущими фильтрами. Снизьте минимальную прибыль, увеличьте лимит себестоимости или очистите поиск типа.
               </p>
-            ) : !visibleManufacturingOffers.length ? (
+            ) : !orderedManufacturingOffers.length ? (
               <div className="rounded-md border border-border p-5 text-center">
                 <Boxes className="mx-auto text-muted-foreground" size={22} />
                 <p className="mt-2 font-medium">Пока нет подтверждённых прибыльных партий</p>
@@ -566,7 +593,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleManufacturingOffers.map((offer) => (
+                    {orderedManufacturingOffers.map((offer) => (
                       <tr key={offer.id} className="border-b border-border align-top">
                         <td className="p-3">
                           <CopyName name={offer.itemName} onCopy={copyName} />
@@ -712,17 +739,17 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 <p className="caption mt-1">Рассматриваются только подтверждённые Reprocess preview, полные порции и стакан каждого выходного материала.</p>
                 {activityFilter === "all" && sortBy === "slotHour" && <p className="caption mt-1">Для переработки прибыль за производственный слот не применяется; список переработки отсортирован по чистой прибыли.</p>}
               </div>
-              <span className="badge">{visibleReprocessingOffers.length} из {production.reprocessingOffers.length} предложений</span>
+              <span className="badge">{orderedReprocessingOffers.length} из {production.reprocessingOffers.length} предложений</span>
             </div>
-            {!visibleReprocessingOffers.length && production.reprocessingOffers.length ? (
+            {!orderedReprocessingOffers.length && production.reprocessingOffers.length ? (
               <p className="caption rounded-md border border-border p-4 text-center">
                 Предложения скрыты текущими фильтрами. Снизьте минимальную прибыль, увеличьте лимит себестоимости или очистите поиск типа.
               </p>
-            ) : !visibleReprocessingOffers.length ? (
+            ) : !orderedReprocessingOffers.length ? (
               <p className="caption rounded-md border border-border p-4 text-center">
                 Нет подтверждённых предложений. Нужны свежий стакан, основа с синхронизированными навыками и сохранённый итоговый процент выхода из окна Reprocess на NPC-станции Jita или Perimeter.
               </p>
-            ) : visibleReprocessingOffers.map((offer) => (
+            ) : orderedReprocessingOffers.map((offer) => (
               <article key={offer.id} className="rounded-md border border-border p-4">
                 <div className="flex flex-wrap justify-between gap-3">
                   <div>
