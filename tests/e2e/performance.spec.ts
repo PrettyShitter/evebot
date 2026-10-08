@@ -36,6 +36,57 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     minROI: 0,
     roiEnabled: false,
   });
+  const observedAt = new Date().toISOString();
+  const snapshot = store.sql.prepare(
+    "SELECT id FROM market_snapshot_runs WHERE region_id='10000002' AND status='complete' AND id NOT LIKE 'demo-%' ORDER BY completed_at DESC LIMIT 1",
+  ).get() as { id: string } | undefined;
+  if (!snapshot) throw Error("Benchmark fixture has no complete The Forge market snapshot");
+  store.sql.prepare("UPDATE market_snapshot_runs SET modified_at=?,expires_at=? WHERE id=?")
+    .run(observedAt, new Date(Date.now() + 60 * 60 * 1000).toISOString(), snapshot.id);
+  store.sql.prepare(
+    `INSERT INTO production_character_profiles(character_id,race,clone_profile,skills_payload,standings_payload,skill_queue_payload,observed_at,source)
+     VALUES ('90000001','Gallente','alpha',?,?,? ,?,'manual')`,
+  ).run(
+    JSON.stringify([{ skill_id: "3380", trained_skill_level: 5, active_skill_level: 5 }]),
+    JSON.stringify([]),
+    JSON.stringify([]),
+    observedAt,
+  );
+  store.sql.prepare(
+    `INSERT INTO production_facility_profiles(location_id,name,system_id,facility_kind,services_payload,industry_tax,access_status,profile_source,evidence,observed_at)
+     VALUES ('60003760','Jita IV benchmark facility','30000142','npc_station','["manufacturing"]','0.0025','confirmed','manual','Synthetic QA profile',?)`,
+  ).run(observedAt);
+  store.sql.prepare(
+    "INSERT INTO production_blueprint_instances(item_id,character_id,blueprint_type_id,location_id,location_flag,quantity,material_efficiency,time_efficiency,runs,observed_at,source) VALUES ('benchmark-rifter-bpo','90000001','691','60003760','Hangar',1,10,20,-1,?,'manual')",
+  ).run(observedAt);
+  store.sql.prepare("INSERT INTO production_system_indices(system_id,activity,cost_index,observed_at) VALUES ('30000142','manufacturing','0.01',?) ON CONFLICT(system_id,activity) DO UPDATE SET cost_index=excluded.cost_index,observed_at=excluded.observed_at")
+    .run(observedAt);
+  const adjustedPrices = new Map([["34", "3.6"], ["35", "15.5"], ["36", "45"], ["37", "152"], ["587", "200000"]]);
+  const adjustedInsert = store.sql.prepare("INSERT INTO production_adjusted_prices(type_id,adjusted_price,observed_at) VALUES (?,?,?) ON CONFLICT(type_id) DO UPDATE SET adjusted_price=excluded.adjusted_price,observed_at=excluded.observed_at");
+  for (const [typeId, price] of adjustedPrices) adjustedInsert.run(typeId, price, observedAt);
+  const orderInsert = store.sql.prepare("INSERT INTO market_orders(generation,id,type_id,location_id,payload) VALUES (?,?,?,?,?)");
+  const benchmarkOrders = [
+    { typeId: "587", buy: true, price: "750000", quantity: 100 },
+    { typeId: "587", buy: false, price: "500000", quantity: 100 },
+    ...[["34", "1"], ["35", "2"], ["36", "3"], ["37", "4"]].map(([typeId, price]) => ({ typeId, buy: false, price, quantity: 10_000_000 })),
+  ];
+  for (const [index, order] of benchmarkOrders.entries()) {
+    const orderId = `benchmark-production-${index}`;
+    orderInsert.run(snapshot.id, orderId, order.typeId, "60003760", JSON.stringify({
+      order_id: orderId,
+      type_id: order.typeId,
+      location_id: "60003760",
+      system_id: "30000142",
+      price: order.price,
+      is_buy_order: order.buy,
+      volume_remain: order.quantity,
+      volume_total: order.quantity,
+      min_volume: 1,
+      range: "station",
+      duration: 90,
+      issued: observedAt,
+    }));
+  }
   store.sql
     .prepare("DELETE FROM market_snapshot_runs WHERE id LIKE 'demo-%'")
     .run();
@@ -105,8 +156,20 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
         stateMs,
         stateJsonBytes,
         maxRendererGapMs: Math.max(...gaps),
-      offersBefore: s.opportunities.length,
-      offersAfter: result.opportunities.length,
+        offersBefore: s.opportunities.length,
+        offersAfter: result.opportunities.length,
+        productionOffers: s.production.offers.length,
+        productionCandidates: s.production.offers.map((offer) => offer.itemName),
+        productionReadiness: {
+          main: s.characters.find((character) => character.isSeller)?.id ?? null,
+          manufacturingRecipes: s.production.manufacturingRecipes,
+          facilityOptions: s.production.facilityOptions.map((facility) => facility.id),
+          facilityProfiles: s.production.facilityProfiles.map((facility) => ({ id: facility.id, services: facility.services, accessStatus: facility.accessStatus })),
+          blueprints: s.production.manufacturingOutputs.length,
+          marketBpoCandidatesScanned: s.production.marketBpoCandidatesScanned,
+          marketBpoCandidatesTotal: s.production.marketBpoCandidatesTotal,
+          marketBpoScanComplete: s.production.marketBpoScanComplete,
+        },
       };
     });
     const stateTimings = readFileSync(
@@ -131,10 +194,15 @@ test("stage 9: full saved regional dataset, local filter latency and renderer re
     });
     expect(initialRows).toBeGreaterThan(0);
     expect(metrics.offersAfter).toBeGreaterThanOrEqual(0);
+    expect(metrics.productionOffers).toBeGreaterThan(0);
+    expect(metrics.productionCandidates).toContain("Rifter");
     expect(uiFilterMs).toBeLessThanOrEqual(300);
     expect(metrics.filterMs).toBeLessThanOrEqual(300);
     expect(metrics.maxRendererGapMs).toBeLessThan(1000);
     await page.screenshot({ path: "test-results/real-regional-market.png" });
+    await page.getByRole("tab", { name: "Производство" }).click();
+    await expect(page.locator('[aria-label="Производственные предложения"]').getByText("Rifter").first()).toBeVisible();
+    await page.screenshot({ path: "test-results/production-large-market-benchmark.png", fullPage: true });
   } finally {
     await app.close();
     rmSync(directory, { recursive: true, force: true });

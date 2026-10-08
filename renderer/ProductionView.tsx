@@ -535,7 +535,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
               </div>
               <span className="badge">{visibleManufacturingOffers.length} из {production.offers.length} · только полный стакан</span>
             </div>
-            {production.marketBpoCandidatesScanned > 0 && <p className="caption">Проверено BPO sell-ордеров: {production.marketBpoCandidatesScanned}{production.marketBpoScanCapped ? " · взяты 300 ордеров с наименьшей ценой, прибыльные предложения вне лимита могут не попасть" : ""}.</p>}
+            {production.marketBpoCandidatesTotal > 0 && <p className="caption" role="status">{production.marketBpoScanComplete ? "Анализ рыночных BPO завершён" : "В фоне анализируются рыночные BPO"}: проверено {production.marketBpoCandidatesScanned} из {production.marketBpoCandidatesTotal}.{production.marketBpoScanCapped ? " Сейчас оцениваются 40 самых дешёвых подходящих BPO; более дорогие источники не проверены." : ""}</p>}
             {!visibleManufacturingOffers.length && production.offers.length ? (
               <p className="caption rounded-md border border-border p-4 text-center">
                 Предложения скрыты текущими фильтрами. Снизьте минимальную прибыль, увеличьте лимит себестоимости или очистите поиск типа.

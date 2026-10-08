@@ -542,7 +542,10 @@ function selected(items: { id: string; quantity: number }[]) {
   });
 }
 let productionOfferCacheKey = "";
-let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoScanCapped"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoScanCapped: false };
+let productionOfferCache: Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "marketBpoScanCapped"> = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, marketBpoScanCapped: false };
+let productionMarketBpoProgress = 0;
+let productionMarketBpoTotal = 0;
+let productionMarketBpoScanKey = "";
 const productionQuoteHandlers = new Map<string, { maxRuns: number; estimateAt: (runs: number) => ManufacturingEstimate }>();
 const productionRequestedRuns = new Map<string, number>();
 let reprocessingOfferCacheKey = "";
@@ -594,8 +597,8 @@ function productionCapital(main: AppState["characters"][number] | undefined) {
 function manufacturingOffers(
   productionStatic: StaticData,
   main: AppState["characters"][number] | undefined,
-): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoScanCapped"> {
-  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoScanCapped: false };
+): Pick<AppState["production"], "offers" | "contractOffers" | "marketBpoCandidatesScanned" | "marketBpoCandidatesTotal" | "marketBpoScanComplete" | "marketBpoScanCapped"> {
+  const empty = { offers: [], contractOffers: [], marketBpoCandidatesScanned: 0, marketBpoCandidatesTotal: 0, marketBpoScanComplete: true, marketBpoScanCapped: false };
   if (!main || !market.data) return empty;
   const hubSystems = new Set(["30000142", "30000144"]);
   const hubStations = productionStatic.stations.filter((station) =>
@@ -717,8 +720,7 @@ function manufacturingOffers(
   const marketData = productionMarketOrders(regions, allowedLocations);
   if (!marketData.complete) return empty;
   const now = Date.now();
-  if (marketData.snapshots.some((snapshot) => !isUnexpiredTimestamp(snapshot.expiresAt, now)))
-    return empty;
+  if (marketData.snapshots.some((snapshot) => !isUnexpiredTimestamp(snapshot.expiresAt, now))) return empty;
   const staleBefore = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
   const adjustedObserved = store.sql.prepare("SELECT max(observed_at) observed FROM production_adjusted_prices").get() as { observed: string | null };
   const indexObserved = store.sql.prepare("SELECT max(observed_at) observed FROM production_system_indices WHERE activity='manufacturing'").get() as { observed: string | null };
@@ -776,7 +778,28 @@ function manufacturingOffers(
         : job.endAt,
     ]),
   ]);
-  if (productionOfferCacheKey === profileKey) return productionOfferCache;
+  const marketBpoScanKey = JSON.stringify([
+    marketData.snapshots.map((snapshot) => snapshot.id),
+    profileRow.observed_at,
+    profileRow.race,
+    profiles.map(({ row }) => [row.location_id, row.observed_at]),
+    blueprints.map((blueprint) => [blueprint.item_id, blueprint.observed_at, blueprint.acquisition_cost, blueprint.acquisition_runs]),
+    contractBlueprints.map(({ contract, item }) => [contract.contract_id, contract.observed_at, contract.location_id, item.recordId, item.typeId]),
+    main.balance,
+    reservedCapital.toFixed(2),
+    adjustedObserved.observed,
+    indexObserved.observed,
+    store.sql.prepare("SELECT value FROM sync_cursors WHERE key='history-revision'").get(),
+  ]);
+  const reuseProfileCache = productionOfferCacheKey === profileKey;
+  const resumingMarketBpoScan = productionMarketBpoScanKey === marketBpoScanKey;
+  if (reuseProfileCache && resumingMarketBpoScan && productionMarketBpoProgress >= productionMarketBpoTotal)
+    return productionOfferCache;
+  if (!resumingMarketBpoScan) {
+    productionMarketBpoProgress = 0;
+    productionMarketBpoTotal = 0;
+    productionMarketBpoScanKey = marketBpoScanKey;
+  }
   productionQuoteHandlers.clear();
 
   const systemById = new Map(productionStatic.systems.map((system) => [system.id, system]));
@@ -916,6 +939,19 @@ function manufacturingOffers(
         locationName: station.name,
       })),
   ];
+  // The material book is invariant across run-count estimates. Building it in
+  // estimateWithChain used to rescan every relevant type for every candidate
+  // run count (up to 96 per blueprint), which stalled startup on a full hub
+  // snapshot. Keep one immutable ask map per facility for this calculation.
+  const chainAsksByStation = new Map<string, Map<string, ReturnType<typeof chainSupplyLevels>>>();
+  const chainAsksAt = (station: Station) => {
+    let asks = chainAsksByStation.get(station.id);
+    if (!asks) {
+      asks = new Map([...neededTypeIds].map((typeId) => [typeId, chainSupplyLevels(typeId, station)]));
+      chainAsksByStation.set(station.id, asks);
+    }
+    return asks;
+  };
   const rootBlueprintCandidates: (typeof blueprints[number] & {
     sourceKind: "owned" | "market_bpo";
     purchaseOrderId: string | null;
@@ -944,8 +980,21 @@ function manufacturingOffers(
     }
   }
   marketBpoListings.sort((left, right) => D(left.order.price).comparedTo(right.order.price));
-  const marketBpoScanCapped = marketBpoListings.length > 300;
-  const selectedMarketBpos = marketBpoListings.slice(0, 300);
+  // Score the cheapest acquisition sources first. A regional snapshot can
+  // contain thousands of sell orders for blueprint types; evaluating every
+  // candidate against every material-depth breakpoint made initial state
+  // computation take minutes. Keep broad recipe discovery, but bound expensive
+  // quote optimization and expose the cap in the UI.
+  const marketBpoEvaluationLimit = 40;
+  const marketBpoScanCapped = marketBpoListings.length > marketBpoEvaluationLimit;
+  const boundedMarketBpos = marketBpoListings.slice(0, marketBpoEvaluationLimit);
+  productionMarketBpoTotal = boundedMarketBpos.length;
+  // Return the owned-blueprint results immediately, then score one acquisition
+  // candidate on each app state refresh. This keeps the market tab responsive
+  // while suggestions for a market-purchased BPO accumulate in the background.
+  const selectedMarketBpos = resumingMarketBpoScan && productionMarketBpoProgress < boundedMarketBpos.length
+    ? boundedMarketBpos.slice(productionMarketBpoProgress, productionMarketBpoProgress + 1)
+    : [];
   for (const { recipe, station, order } of selectedMarketBpos) {
       rootBlueprintCandidates.push({
         item_id: `market-bpo:${recipe.blueprintTypeId}:${station.id}:${order.order_id}`,
@@ -962,7 +1011,9 @@ function manufacturingOffers(
         purchaseCashCost: order.price,
       });
   }
-  const marketBpoCandidateCount = selectedMarketBpos.length;
+  const marketBpoCandidateCount = resumingMarketBpoScan
+    ? Math.min(productionMarketBpoProgress + selectedMarketBpos.length, boundedMarketBpos.length)
+    : 0;
   const chainRecipesAt = (station: Station, forcedRoot: ChainRecipe): ChainRecipe[] => {
     // A structure's rig modifiers are output-specific. Until the exact modifiers
     // for every intermediate product are confirmed, buy chain components instead
@@ -1010,7 +1061,7 @@ function manufacturingOffers(
       targetTypeId: direct.outputTypeId,
       targetQuantity: direct.outputQuantity,
       recipes: chainRecipesAt(station, root),
-      asksByType: new Map([...neededTypeIds].map((typeId) => [typeId, chainSupplyLevels(typeId, station)])),
+      asksByType: chainAsksAt(station),
       forceTargetRecipeId: rootId,
       maxSearchStates: 2_500,
     });
@@ -1191,8 +1242,9 @@ function manufacturingOffers(
       if (blueprint.sourceKind === "owned")
         productionQuoteHandlers.set(quoteKey, { maxRuns: low, estimateAt });
       const candidates = new Set<number>([1, low]);
+      const candidateLimit = blueprint.sourceKind === "market_bpo" ? 4 : 96;
       const addRunBoundary = (boundary: number) => {
-        if (candidates.size >= 96) return;
+        if (candidates.size >= candidateLimit) return;
         for (const runCount of [boundary - 1, boundary, boundary + 1])
           if (runCount >= 1 && runCount <= low) candidates.add(runCount);
       };
@@ -1429,11 +1481,21 @@ function manufacturingOffers(
   offers.sort((a, b) => offerScore(b.estimate, b.blueprintSource.kind === "market_bpo")
     .comparedTo(offerScore(a.estimate, a.blueprintSource.kind === "market_bpo")));
   contractOffers.sort((a, b) => offerScore(b.estimate, true).comparedTo(offerScore(a.estimate, true)));
+  productionMarketBpoProgress = resumingMarketBpoScan
+    ? Math.min(productionMarketBpoProgress + selectedMarketBpos.length, boundedMarketBpos.length)
+    : 0;
+  const mergedOffers = new Map<string, AppState["production"]["offers"][number]>();
+  if (resumingMarketBpoScan)
+    for (const offer of productionOfferCache.offers) mergedOffers.set(offer.id, offer);
+  for (const offer of offers) mergedOffers.set(offer.id, offer);
   productionOfferCacheKey = profileKey;
   productionOfferCache = {
-    offers: offers.slice(0, 100),
+    offers: [...mergedOffers.values()].sort((a, b) => offerScore(b.estimate, b.blueprintSource.kind === "market_bpo")
+      .comparedTo(offerScore(a.estimate, a.blueprintSource.kind === "market_bpo"))).slice(0, 100),
     contractOffers: contractOffers.slice(0, 100),
     marketBpoCandidatesScanned: marketBpoCandidateCount,
+    marketBpoCandidatesTotal: boundedMarketBpos.length,
+    marketBpoScanComplete: productionMarketBpoProgress >= boundedMarketBpos.length,
     marketBpoScanCapped,
   };
   return productionOfferCache;
@@ -2427,6 +2489,8 @@ function productionSummary(): AppState["production"] {
     manufacturingOutputs,
     offers: manufacturing.offers,
     marketBpoCandidatesScanned: manufacturing.marketBpoCandidatesScanned,
+    marketBpoCandidatesTotal: manufacturing.marketBpoCandidatesTotal,
+    marketBpoScanComplete: manufacturing.marketBpoScanComplete,
     marketBpoScanCapped: manufacturing.marketBpoScanCapped,
     contractOffers: manufacturing.contractOffers,
     reprocessingOffers: reprocessingOffers(productionStatic, main),
@@ -2451,7 +2515,7 @@ function productionSummaryForState() {
   const value = productionSummary();
   stateProductionCache = {
     value,
-    validUntil: Date.now() + 5_000,
+    validUntil: Date.now() + 1_000,
     databaseVersion,
   };
   return value;

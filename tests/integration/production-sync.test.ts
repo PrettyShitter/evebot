@@ -490,9 +490,16 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       blueprintItemId: "9102",
       transactionId: "99001",
     })).error).toContain("BPO");
-    const marketBpoOffer = confirmedNpc.value?.production.offers.find((offer) => offer.blueprintTypeName === "Condor Blueprint");
-    expect(confirmedNpc.value?.production.marketBpoCandidatesScanned).toBeGreaterThan(0);
-    expect(confirmedNpc.value?.production.marketBpoScanCapped).toBe(false);
+    let marketBpoState = confirmedNpc.value;
+    let marketBpoOffer = marketBpoState?.production.offers.find((offer) => offer.blueprintTypeName === "Condor Blueprint");
+    for (let attempt = 0; !marketBpoOffer && attempt < 3; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 1_050));
+      marketBpoState = (await request(undefined)).value;
+      marketBpoOffer = marketBpoState?.production.offers.find((offer) => offer.blueprintTypeName === "Condor Blueprint");
+    }
+    expect(marketBpoState?.production.marketBpoCandidatesScanned).toBeGreaterThan(0);
+    expect(marketBpoState?.production.marketBpoCandidatesTotal).toBeGreaterThan(0);
+    expect(marketBpoState?.production.marketBpoScanCapped).toBe(false);
     expect(marketBpoOffer).toMatchObject({
       blueprintSource: { kind: "market_bpo", purchaseOrderId: "ask-bpo-684", purchasePrice: "200000" },
       chainExecutable: false,

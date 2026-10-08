@@ -381,6 +381,8 @@ export interface AppState {
       observedAt: string;
     }[];
     marketBpoCandidatesScanned: number;
+    marketBpoCandidatesTotal: number;
+    marketBpoScanComplete: boolean;
     marketBpoScanCapped: boolean;
     contractOffers: {
       id: string;

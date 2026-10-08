@@ -1,68 +1,102 @@
 {
-  "at": "2026-10-08T00:05:08.291Z",
-  "uiFilterMs": 61.40000003576279,
+  "at": "2026-10-08T00:52:40.683Z",
+  "uiFilterMs": 54.5,
   "stateTimings": [
     {
-      "productionMs": 606.7257500000001,
-      "opportunitiesMs": 1457.0436670000001,
-      "detailMs": 1.2157499999998436,
-      "totalMs": 2065.615458,
+      "productionMs": 1842.421084,
+      "opportunitiesMs": 1393.5979159999997,
+      "detailMs": 1.220209000000068,
+      "totalMs": 3237.814209,
       "offerCount": 8,
-      "productionOfferCount": 0
+      "productionOfferCount": 1
     },
     {
-      "productionMs": 0.00937500000009095,
-      "opportunitiesMs": 0.22762499999998909,
-      "detailMs": 0.9167919999999867,
-      "totalMs": 1.239542000000256,
+      "productionMs": 2234.565583,
+      "opportunitiesMs": 0.2845839999999953,
+      "detailMs": 0.9873330000000351,
+      "totalMs": 2235.891833,
       "offerCount": 8,
-      "productionOfferCount": 0
+      "productionOfferCount": 2
     },
     {
-      "productionMs": 0.017334000000118976,
-      "opportunitiesMs": 1.3771249999999782,
-      "detailMs": 1.7767499999999927,
-      "totalMs": 3.339792000000216,
+      "productionMs": 0.017333000000689935,
+      "opportunitiesMs": 1.4766669999999067,
+      "detailMs": 2.3877080000002024,
+      "totalMs": 4.027084000000286,
       "offerCount": 3,
-      "productionOfferCount": 0
+      "productionOfferCount": 2
     },
     {
-      "productionMs": 0.013249999999970896,
-      "opportunitiesMs": 0.29854199999999764,
-      "detailMs": 1.2600830000001224,
-      "totalMs": 1.7075419999996484,
+      "productionMs": 0.014167000000270491,
+      "opportunitiesMs": 0.29858299999978044,
+      "detailMs": 1.4274169999998776,
+      "totalMs": 1.9008340000000317,
       "offerCount": 3,
-      "productionOfferCount": 0
+      "productionOfferCount": 2
     },
     {
-      "productionMs": 0.010083999999551452,
-      "opportunitiesMs": 0.2477910000002339,
-      "detailMs": 1.011167000000114,
-      "totalMs": 1.329167000000325,
+      "productionMs": 0.011792000000241387,
+      "opportunitiesMs": 0.24749999999949068,
+      "detailMs": 1.0228750000005675,
+      "totalMs": 1.3647080000000642,
       "offerCount": 0,
-      "productionOfferCount": 0
+      "productionOfferCount": 2
     },
     {
-      "productionMs": 0.009209000000282686,
-      "opportunitiesMs": 1412.324666,
-      "detailMs": 1.0877919999998085,
-      "totalMs": 1413.483416,
+      "productionMs": 0.010209000000031665,
+      "opportunitiesMs": 1367.560458,
+      "detailMs": 1.1592499999997017,
+      "totalMs": 1368.8051249999999,
       "offerCount": 0,
-      "productionOfferCount": 0
-    },
-    {
-      "productionMs": 0.010166999999910331,
-      "opportunitiesMs": 0.1693329999998241,
-      "detailMs": 0.9116250000001855,
-      "totalMs": 1.1415419999998448,
-      "offerCount": 0,
-      "productionOfferCount": 0
+      "productionOfferCount": 2
     }
   ],
-  "filterMs": 9.899999976158142,
-  "stateMs": 12.299999952316284,
-  "stateJsonBytes": 435689,
-  "maxRendererGapMs": 17.19999998807907,
+  "filterMs": 10.699999988079071,
+  "stateMs": 12.600000023841858,
+  "stateJsonBytes": 447850,
+  "maxRendererGapMs": 18.30000001192093,
   "offersBefore": 3,
-  "offersAfter": 0
+  "offersAfter": 0,
+  "productionOffers": 2,
+  "productionCandidates": [
+    "Rifter",
+    "Infrared S"
+  ],
+  "productionReadiness": {
+    "main": "90000001",
+    "manufacturingRecipes": 4867,
+    "facilityOptions": [
+      "60000361",
+      "60000364",
+      "60000451",
+      "60000463",
+      "60002953",
+      "60002959",
+      "60003055",
+      "60003460",
+      "60003463",
+      "60003466",
+      "60003469",
+      "60003757",
+      "60003760",
+      "60004423",
+      "60015169",
+      "60015260",
+      "60015261",
+      "60015262"
+    ],
+    "facilityProfiles": [
+      {
+        "id": "60003760",
+        "services": [
+          "manufacturing"
+        ],
+        "accessStatus": "confirmed"
+      }
+    ],
+    "blueprints": 4859,
+    "marketBpoCandidatesScanned": 1,
+    "marketBpoCandidatesTotal": 40,
+    "marketBpoScanComplete": false
+  }
 }
