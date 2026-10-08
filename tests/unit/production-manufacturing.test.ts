@@ -66,12 +66,12 @@ describe("manufacturing estimator", () => {
     expect(estimate.materialsCost).toBe("2960.00");
     // EIV uses ME 0 inputs (20*20 + 2*100 = 600), not the reduced shopping list.
     expect(estimate.estimatedItemValue).toBe("600.00");
-    expect(estimate.installationFee).toBe("33.00");
-    expect(estimate.totalCost).toBe("2993.00");
+    expect(estimate.installationFee).toBe("43.50");
+    expect(estimate.totalCost).toBe("3003.50");
     expect(estimate.outputQuantity).toBe(10);
     expect(estimate.immediate.filled).toBe(10);
     expect(estimate.immediate.gross).toBe("4600.00");
-    expect(estimate.immediate.netProfit).toBe("1262.00");
+    expect(estimate.immediate.netProfit).toBe("1251.50");
     expect(estimate.timeSeconds).toBe(1690);
     expect(estimate.status).toBe("ready");
   });
@@ -83,9 +83,9 @@ describe("manufacturing estimator", () => {
       blueprintAcquisitionAlreadyPaid: true,
     });
     expect(estimate.blueprintAcquisitionCost).toBe("1200000.00");
-    expect(estimate.totalCost).toBe("1202993.00");
-    expect(estimate.cashRequired).toBe("2993.00");
-    expect(estimate.immediate.netProfit).toBe("-1198738.00");
+    expect(estimate.totalCost).toBe("1203003.50");
+    expect(estimate.cashRequired).toBe("3003.50");
+    expect(estimate.immediate.netProfit).toBe("-1198748.50");
   });
 
   it("keeps full contract cash separate from the cost allocated to a partial BPC run batch", () => {
@@ -95,11 +95,11 @@ describe("manufacturing estimator", () => {
       blueprintPurchaseCashCost: "1200000.00",
     });
     expect(estimate.blueprintAcquisitionCost).toBe("300000.00");
-    expect(estimate.totalCost).toBe("302993.00");
-    expect(estimate.cashRequired).toBe("1202993.00");
+    expect(estimate.totalCost).toBe("303003.50");
+    expect(estimate.cashRequired).toBe("1203003.50");
     expect(estimate.blueprintPurchaseCashCost).toBe("1200000.00");
-    expect(estimate.firstCycleProfit.immediate).toBe("-1198738.00");
-    expect(Number(estimate.firstCycleRoi.immediate)).toBeCloseTo(-1198738 / 1202993, 5);
+    expect(estimate.firstCycleProfit.immediate).toBe("-1198748.50");
+    expect(Number(estimate.firstCycleRoi.immediate)).toBeCloseTo(-1198748.5 / 1203003.5, 5);
     expect(estimate.blueprintPaybackBatches.immediate).toBeNull();
   });
 
@@ -108,11 +108,11 @@ describe("manufacturing estimator", () => {
       ...input,
       blueprintPurchaseCashCost: "1200000.00",
     });
-    expect(estimate.totalCost).toBe("2993.00");
-    expect(estimate.cashRequired).toBe("1202993.00");
-    expect(estimate.immediate.netProfit).toBe("1262.00");
-    expect(estimate.firstCycleProfit.immediate).toBe("-1198738.00");
-    expect(estimate.blueprintPaybackBatches.immediate).toBe(951);
+    expect(estimate.totalCost).toBe("3003.50");
+    expect(estimate.cashRequired).toBe("1203003.50");
+    expect(estimate.immediate.netProfit).toBe("1251.50");
+    expect(estimate.firstCycleProfit.immediate).toBe("-1198748.50");
+    expect(estimate.blueprintPaybackBatches.immediate).toBe(959);
   });
 
   it("does not use zero tax or omitted structure bonuses as a profitable estimate", () => {
@@ -142,10 +142,10 @@ describe("manufacturing estimator", () => {
     expect(estimate.materials.map((material) => material.quantity)).toEqual([17, 2]);
     expect(estimate.materialsCost).toBe("2840.00");
     expect(estimate.estimatedItemValue).toBe("600.00");
-    expect(estimate.installationFee).toBe("34.50");
-    expect(estimate.totalCost).toBe("2874.50");
+    expect(estimate.installationFee).toBe("45.00");
+    expect(estimate.totalCost).toBe("2885.00");
     expect(estimate.timeSeconds).toBe(1606);
-    expect(estimate.formulaVersion).toBe("ccp-viridian-upwell-alpha-profile-v1");
+    expect(estimate.formulaVersion).toBe("ccp-current-support-alpha-2pct-upwell-profile-v2");
     expect(estimate.fees.brokerFeeRate).toBe("0.010000");
     expect(estimate.status).toBe("ready");
   });
@@ -208,9 +208,9 @@ describe("manufacturing estimator", () => {
     const estimate = estimateManufacturing({ ...input, blueprintAcquisitionCost: "10000" });
     expect(estimate.blueprintAcquisitionCost).toBe("10000.00");
     expect(estimate.materialsCost).toBe("2960.00");
-    expect(estimate.installationFee).toBe("33.00");
-    expect(estimate.totalCost).toBe("12993.00");
-    expect(estimate.immediate.netProfit).toBe("-8738.00");
+    expect(estimate.installationFee).toBe("43.50");
+    expect(estimate.totalCost).toBe("13003.50");
+    expect(estimate.immediate.netProfit).toBe("-8748.50");
   });
 
   it("re-evaluates every cost and output when the requested run count changes", () => {

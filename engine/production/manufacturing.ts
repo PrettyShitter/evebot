@@ -105,7 +105,7 @@ export interface ManufacturingEstimate {
     brokerFeeRate: string;
   };
   timeSeconds: number | null;
-  formulaVersion: "ccp-viridian-havoc-npc-alpha-v2" | "ccp-viridian-upwell-alpha-profile-v1";
+  formulaVersion: "ccp-current-support-alpha-2pct-npc-v3" | "ccp-current-support-alpha-2pct-upwell-profile-v2";
 }
 
 export function manufacturingValueAndFee(
@@ -184,10 +184,13 @@ export function blueprintCapitalMetrics(
   };
 }
 
-const FORMULA_VERSION = "ccp-viridian-havoc-npc-alpha-v2" as const;
+const FORMULA_VERSION = "ccp-current-support-alpha-2pct-npc-v3" as const;
 const NPC_FACILITY_TAX = D("0.0025");
 const SCC_SURCHARGE = D("0.04");
-const ALPHA_SURCHARGE = D("0.0025");
+// CCP's current Alpha/Omega support page (updated 2026-02-04) lists an
+// additional 2% Alpha industry tax. This supersedes the older 0.25% value
+// in Viridian release notes until an in-game Industry preview is available.
+const ALPHA_SURCHARGE = D("0.02");
 
 /**
  * Conservative single-step manufacturing quote. It only marks an estimate ready
@@ -407,7 +410,7 @@ export function estimateManufacturing(input: ManufacturingInput): ManufacturingE
       brokerFeeRate: fee.broker.toFixed(6),
     },
     timeSeconds,
-    formulaVersion: facility.kind === "npc_station" ? FORMULA_VERSION : "ccp-viridian-upwell-alpha-profile-v1",
+    formulaVersion: facility.kind === "npc_station" ? FORMULA_VERSION : "ccp-current-support-alpha-2pct-upwell-profile-v2",
   };
 }
 

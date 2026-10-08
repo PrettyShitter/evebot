@@ -48,7 +48,7 @@ test("local production tab loads live public ESI data without GitHub or SSO", as
       await expect(contractsPanel.locator("article")).toHaveCount(5);
     }
     await expect(page.getByText("Баланс основы · без торгового haircut")).toBeVisible();
-    await expect(page.getByText(/справка CCP от февраля 2026/)).toBeVisible();
+    await expect(page.getByText(/CCP от 4 февраля 2026/)).toBeVisible();
     await page.getByLabel("Фильтр вида производства").selectOption("reprocessing");
     await expect(page.getByLabel("Предложения переработки")).toBeVisible();
     await expect(page.getByLabel("Производственные предложения")).toHaveCount(0);
