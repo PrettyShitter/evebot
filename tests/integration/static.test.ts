@@ -80,11 +80,15 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
       { _key: 123456788, name: { en: "Ore" }, groupID: 462, marketGroupID: 64, published: true, portionSize: 100, packagedVolume: 1 },
       { _key: 123456787, name: { en: "Ice" }, groupID: 465, marketGroupID: 64, published: true, portionSize: 100, packagedVolume: 1 },
       { _key: 123456786, name: { en: "Other item" }, groupID: 25, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 1 },
+      { _key: 123456785, name: { en: "Ice resource" }, description: { en: "Found in ice asteroids" }, groupID: 2022, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 1 },
+      { _key: 123456784, name: { en: "Special crystal" }, description: { en: "A special crystal" }, groupID: 2024, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 1 },
     ]),
     "groups.jsonl": jsonl([
       { _key: 25, categoryID: 6, name: { en: "Ships" } },
       { _key: 462, categoryID: 25, name: { en: "Veldspar" } },
       { _key: 465, categoryID: 25, name: { en: "Ice" } },
+      { _key: 2022, categoryID: 25, name: { en: "Temporal Resources" } },
+      { _key: 2024, categoryID: 25, name: { en: "Fluorite" } },
     ]),
     "npcCorporations.jsonl": jsonl([]),
     "marketGroups.jsonl": jsonl([
@@ -131,6 +135,8 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
       { _key: 123456788, materials: [{ materialTypeID: 34, quantity: 175 }] },
       { _key: 123456787, materials: [{ materialTypeID: 16272, quantity: 100 }] },
       { _key: 123456786, materials: [{ materialTypeID: 34, quantity: 5 }] },
+      { _key: 123456785, materials: [{ materialTypeID: 48927, quantity: 2 }] },
+      { _key: 123456784, materials: [{ materialTypeID: 48927, quantity: 2 }] },
     ]),
     "cloneGrades.jsonl": jsonl([
       {
@@ -167,6 +173,8 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
     { typeId: "123456788", outputRounding: "ceil", materials: [{ typeId: "34", quantity: 175 }] },
     { typeId: "123456787", outputRounding: "nearest", materials: [{ typeId: "16272", quantity: 100 }] },
     { typeId: "123456786", outputRounding: "floor", materials: [{ typeId: "34", quantity: 5 }] },
+    { typeId: "123456785", outputRounding: "nearest", materials: [{ typeId: "48927", quantity: 2 }] },
+    { typeId: "123456784", outputRounding: "unknown", materials: [{ typeId: "48927", quantity: 2 }] },
   ]);
   expect(data.alphaSkillCaps).toEqual({ Amarr: { "3380": 3 } });
 });
@@ -209,7 +217,7 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
         "2026-10-02T00:00:00Z",
       );
     const service = new MarketService(store, "resources", false);
-    expect(service.data?.schemaVersion).toBe(2);
+    expect(service.data?.schemaVersion).toBe(3);
     expect(service.data?.reprocessing?.find((recipe) => recipe.typeId === "1230")?.outputRounding).toBe("ceil");
     expect(service.data?.zone.length).toBe(4);
     expect(service.data?.stations.length).toBe(34);
@@ -218,7 +226,7 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
       false,
     );
     expect(readStatic(store)?.zone.length).toBe(4);
-    expect(readStatic(store)?.schemaVersion).toBe(2);
+    expect(readStatic(store)?.schemaVersion).toBe(3);
     expect(store.sql.prepare("SELECT id FROM deals").get()).toEqual({
       id: "kept",
     });

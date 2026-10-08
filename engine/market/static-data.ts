@@ -39,7 +39,7 @@ export interface ManufacturingBlueprint {
 export interface ReprocessingRecipe {
   typeId: string;
   materials: ProductionMaterial[];
-  outputRounding?: "ceil" | "nearest" | "floor";
+  outputRounding?: "ceil" | "nearest" | "floor" | "unknown";
 }
 export interface StaticData {
   version: string;
@@ -88,6 +88,7 @@ const stationSchema = z.object({
 const typeSchema = z.object({
   _key: z.number().int(),
   name: named,
+  description: named.optional(),
   groupID: z.number().int(),
   marketGroupID: z.number().int().optional(),
   packagedVolume: z.number().optional(),
@@ -188,6 +189,12 @@ export function extractSde(zip: Uint8Array): StaticData {
   );
   const typeRows = records("types.jsonl").map((row) => typeSchema.parse(row));
   const typeRowsById = new Map(typeRows.map((type) => [type._key, type]));
+  const knownOreGroupIds = new Set([
+    450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462,
+    467, 468, 469, 1884, 1920, 1921, 1922, 1923, 2006,
+    4029, 4030, 4031, 4513, 4514, 4515, 4516, 4755, 4756, 4757,
+    4758, 4759, 4857, 5083, 5084, 5085, 5086,
+  ]);
   const types = typeRows
     .filter((t) => t.published && t.marketGroupID && t._key !== 44992)
     .map((t) => ({
@@ -266,11 +273,16 @@ export function extractSde(zip: Uint8Array): StaticData {
         ).default([]),
       })
       .parse(row);
-    const group = groupsById.get(typeRowsById.get(value._key)?.groupID ?? -1);
+    const sourceType = typeRowsById.get(value._key);
+    const group = groupsById.get(sourceType?.groupID ?? -1);
     const groupName = group?.name?.en.toLocaleLowerCase("en-US") ?? "";
-    const outputRounding: NonNullable<ReprocessingRecipe["outputRounding"]> = group?.categoryID === 25
-      ? groupName.includes("ice") ? "nearest" : "ceil"
-      : "floor";
+    const description = sourceType?.description?.en.toLocaleLowerCase("en-US") ?? "";
+    const isAsteroidCategory = group?.categoryID === 25;
+    const isIce = isAsteroidCategory && (groupName.includes("ice") || description.includes("ice asteroid"));
+    const isOre = isAsteroidCategory && (knownOreGroupIds.has(group?._key ?? -1) || /\bores?\b/.test(description));
+    const outputRounding: NonNullable<ReprocessingRecipe["outputRounding"]> = isIce
+      ? "nearest"
+      : isOre ? "ceil" : isAsteroidCategory ? "unknown" : "floor";
     return {
       typeId: String(value._key),
       outputRounding,
@@ -296,7 +308,7 @@ export function extractSde(zip: Uint8Array): StaticData {
   }
   return {
     version: String(meta.buildNumber),
-    schemaVersion: 2,
+    schemaVersion: 3,
     npcStationIds: records("npcStations.jsonl").map((r) =>
       String(stationSchema.parse(r)._key),
     ),

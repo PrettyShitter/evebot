@@ -70,6 +70,15 @@ describe("reprocessing estimator", () => {
     expect(estimate("nearest", "50").outputs[0]?.quantity).toBe(2);
   });
 
+  it("keeps unclassified asteroid materials in review instead of asserting a rounding rule", () => {
+    const result = estimateReprocessing({
+      ...fixture,
+      recipe: { ...fixture.recipe, outputRounding: "unknown" },
+    });
+    expect(result.status).toBe("review");
+    expect(result.reasons).toContain("Неизвестное округление выхода для типа 100; сверьте Reprocess preview");
+  });
+
   it("keeps unknown preview yield and partial depth in review", () => {
     const result = estimateReprocessing({
       ...fixture,

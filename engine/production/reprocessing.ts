@@ -60,6 +60,8 @@ export function estimateReprocessing(input: {
     reasons.push("Не подтверждён итоговый выход из Reprocess preview на этой площадке");
   if (input.reprocessingTaxRate === null)
     reasons.push("Не подтверждена ставка налога переработки для этой площадки");
+  if (input.recipe.outputRounding === "unknown")
+    reasons.push(`Неизвестное округление выхода для типа ${input.recipe.typeId}; сверьте Reprocess preview`);
   const yieldRate = input.yieldPercent ? D(input.yieldPercent).div(100) : D(0);
   if (yieldRate.lt(0) || yieldRate.gt(1)) reasons.push("Итоговый выход должен быть от 0 до 100 процентов");
   if (input.yieldPercent && input.evidenceAt && !isFreshTimestamp(input.evidenceAt, 30 * 24 * 60 * 60 * 1000))
