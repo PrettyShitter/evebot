@@ -52,6 +52,24 @@ describe("reprocessing estimator", () => {
     });
   });
 
+  it("applies the EVE output rounding rule for ore, ice, and other reprocessable items", () => {
+    const estimate = (outputRounding: "ceil" | "nearest" | "floor", yieldPercent = "40") =>
+      estimateReprocessing({
+        ...fixture,
+        recipe: { ...fixture.recipe, outputRounding, materials: [{ typeId: "200", quantity: 3 }] },
+        inputQuantity: 100,
+        yieldPercent,
+        supply: [{ id: "s1", price: "2", quantity: 100 }],
+        demand: new Map([["200", [{ id: "b1", price: "1", quantity: 10 }]]]),
+        asks: new Map([["200", [{ id: "a1", price: "1", quantity: 10 }]]]),
+      });
+
+    expect(estimate("ceil").outputs[0]?.quantity).toBe(2);
+    expect(estimate("nearest").outputs[0]?.quantity).toBe(1);
+    expect(estimate("floor").outputs[0]?.quantity).toBe(1);
+    expect(estimate("nearest", "50").outputs[0]?.quantity).toBe(2);
+  });
+
   it("keeps unknown preview yield and partial depth in review", () => {
     const result = estimateReprocessing({
       ...fixture,

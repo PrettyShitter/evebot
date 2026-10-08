@@ -81,7 +81,12 @@ export function estimateReprocessing(input: {
   if (purchase.filled < consumedQuantity)
     reasons.push(`Недостаточно sell-глубины входного предмета: ${purchase.filled}/${consumedQuantity}`);
   const outputs = input.recipe.materials.map((material) => {
-    const quantity = D(material.quantity).mul(portions).mul(yieldRate).floor().toNumber();
+    const rawQuantity = D(material.quantity).mul(portions).mul(yieldRate);
+    const quantity = input.recipe.outputRounding === "ceil"
+      ? rawQuantity.ceil().toNumber()
+      : input.recipe.outputRounding === "nearest"
+        ? rawQuantity.round().toNumber()
+        : rawQuantity.floor().toNumber();
     const sale = fill(input.demand.get(material.typeId) ?? [], quantity, "sell");
     const asks = input.asks.get(material.typeId) ?? [];
     const askPrice = asks.length

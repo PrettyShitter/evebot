@@ -35,7 +35,11 @@ export class MarketService {
         Number.isFinite(Number(bundled.version)) &&
         Number.isFinite(Number(persisted?.version)) &&
         Number(bundled.version) > Number(persisted?.version);
-      if (!persisted || hasNewerBundle) this.data = bundled;
+      const hasNewerStaticSchema =
+        Number.isFinite(Number(bundled.schemaVersion)) &&
+        Number(bundled.version) === Number(persisted?.version) &&
+        Number(bundled.schemaVersion) > Number(persisted?.schemaVersion ?? 1);
+      if (!persisted || hasNewerBundle || hasNewerStaticSchema) this.data = bundled;
       else if (
         CENTERS.every((center) =>
           persisted.systems.some((s) => s.id === center),
@@ -52,6 +56,7 @@ export class MarketService {
     if (this.data && !demo) {
       const narrowed = withSearchZone(this.data);
       if (
+        Number(narrowed.schemaVersion ?? 1) > Number(persisted?.schemaVersion ?? 1) ||
         JSON.stringify(narrowed.zone) !== JSON.stringify(this.data.zone) ||
         JSON.stringify(narrowed.stations) !== JSON.stringify(this.data.stations)
       ) {

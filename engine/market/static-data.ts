@@ -39,9 +39,11 @@ export interface ManufacturingBlueprint {
 export interface ReprocessingRecipe {
   typeId: string;
   materials: ProductionMaterial[];
+  outputRounding?: "ceil" | "nearest" | "floor";
 }
 export interface StaticData {
   version: string;
+  schemaVersion?: number;
   npcStationIds?: string[];
   systems: System[];
   stations: Station[];
@@ -173,16 +175,20 @@ export function extractSde(zip: Uint8Array): StaticData {
       ownerId: String(s.ownerID),
       factionId: corporations.get(String(s.ownerID)) ?? null,
     }));
-  const shipGroups = new Set(
-    records("groups.jsonl")
-      .map((row) =>
-        z.object({ _key: z.number(), categoryID: z.number() }).parse(row),
-      )
-      .filter((g) => g.categoryID === 6)
-      .map((g) => g._key),
+  const groupRows = records("groups.jsonl").map((row) =>
+    z.object({
+      _key: z.number(),
+      categoryID: z.number(),
+      name: named.optional(),
+    }).parse(row),
   );
-  const types = records("types.jsonl")
-    .map((row) => typeSchema.parse(row))
+  const groupsById = new Map(groupRows.map((group) => [group._key, group]));
+  const shipGroups = new Set(
+    groupRows.filter((group) => group.categoryID === 6).map((group) => group._key),
+  );
+  const typeRows = records("types.jsonl").map((row) => typeSchema.parse(row));
+  const typeRowsById = new Map(typeRows.map((type) => [type._key, type]));
+  const types = typeRows
     .filter((t) => t.published && t.marketGroupID && t._key !== 44992)
     .map((t) => ({
       id: String(t._key),
@@ -260,8 +266,14 @@ export function extractSde(zip: Uint8Array): StaticData {
         ).default([]),
       })
       .parse(row);
+    const group = groupsById.get(typeRowsById.get(value._key)?.groupID ?? -1);
+    const groupName = group?.name?.en.toLocaleLowerCase("en-US") ?? "";
+    const outputRounding: NonNullable<ReprocessingRecipe["outputRounding"]> = group?.categoryID === 25
+      ? groupName.includes("ice") ? "nearest" : "ceil"
+      : "floor";
     return {
       typeId: String(value._key),
+      outputRounding,
       materials: value.materials.map((m) => ({
         typeId: String(m.materialTypeID),
         quantity: m.quantity,
@@ -284,6 +296,7 @@ export function extractSde(zip: Uint8Array): StaticData {
   }
   return {
     version: String(meta.buildNumber),
+    schemaVersion: 2,
     npcStationIds: records("npcStations.jsonl").map((r) =>
       String(stationSchema.parse(r)._key),
     ),

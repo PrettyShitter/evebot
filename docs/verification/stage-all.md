@@ -1,8 +1,8 @@
 # Этап all: автоматические проверки
 
-UTC: 2026-10-08T02:49:36.238Z
+UTC: 2026-10-08T03:10:25.053Z
 
-Commit: d69275717ab352a1fc5ea8d14472926b469f1655; проверяется рабочее дерево.
+Commit: efb623101f9993e8f94e9425d12b83f99a906085; проверяется рабочее дерево.
 
 ## pnpm lint
 
@@ -32,12 +32,9 @@ Exit code: 0; PASS
 
 
  Test Files  21 passed (21)
-      Tests  106 passed (106)
-   Start at  09:49:46
-   Duration  1.18s (transform 41%, import 40%, tests 14%, worker 4%)
-
-    Isolate  21 workers spawned · ~231ms startup each (spawn + environment, per file)
-             at least ~308ms faster with isolate: false — reuses workers across files instead of one per file
+      Tests  107 passed (107)
+   Start at  10:10:28
+   Duration  439ms (transform 42%, import 37%, tests 16%, worker 4%)
 
 $ vitest run tests/unit
 
@@ -54,8 +51,8 @@ Exit code: 0; PASS
 
  Test Files  13 passed (13)
       Tests  38 passed (38)
-   Start at  09:49:48
-   Duration  5.81s (import 52%, tests 43%, transform 5%)
+   Start at  10:10:29
+   Duration  3.21s (tests 50%, import 44%, transform 6%)
 
 $ vitest run tests/integration
 
@@ -75,7 +72,7 @@ dist/renderer/index.html                   0.61 kB │ gzip:   0.38 kB
 dist/renderer/assets/index-bGJJNQMv.css   28.34 kB │ gzip:   6.32 kB
 dist/renderer/assets/index-CjW3QoaR.js   523.86 kB │ gzip: 157.61 kB
 
-✓ built in 333ms
+✓ built in 161ms
 $ node scripts/build.mjs
 [plugin builtin:vite-reporter]
 (!) Some chunks are larger than 500 kB after minification. Consider:
@@ -93,18 +90,18 @@ Exit code: 0; PASS
 
 Running 7 tests using 1 worker
 
-  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (3.5s)
-  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (2.2s)
+  ✓  1 tests/e2e/accounting.spec.ts:5:1 › stage 7: desktop selection, imported operations, review and explicit closing survives restart (1.5s)
+  ✓  2 tests/e2e/market.spec.ts:5:1 › stage 5: filters, quantity quote, basket and idempotent acceptance (1.1s)
   -  3 tests/e2e/performance.spec.ts:15:1 › stage 9: full saved regional dataset, local filter latency and renderer responsiveness
-  ✓  4 tests/e2e/production-contract-confirmation.spec.ts:7:1 › unknown public BPC attributes can be confirmed in the desktop UI (3.1s)
+  ✓  4 tests/e2e/production-contract-confirmation.spec.ts:7:1 › unknown public BPC attributes can be confirmed in the desktop UI (1.2s)
   -  5 tests/e2e/production-live.spec.ts:6:1 › local production tab loads live public ESI data without GitHub or SSO
   -  6 tests/e2e/production-packaged.spec.ts:6:1 › packaged macOS app starts non-demo and reads live public ESI without GitHub
-  ✓  7 tests/e2e/shell.spec.ts:5:1 › shell: four tabs, production data panel, restricted preload and settings survive restart (3.4s)
+  ✓  7 tests/e2e/shell.spec.ts:5:1 › shell: four tabs, production data panel, restricted preload and settings survive restart (1.4s)
 
   3 skipped
-  4 passed (13.7s)
+  4 passed (5.9s)
 $ playwright test
-(node:43706) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(node:52353) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
 (Use `node --trace-warnings ...` to show where the warning was created)
 
 ```

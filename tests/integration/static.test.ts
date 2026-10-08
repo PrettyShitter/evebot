@@ -76,9 +76,16 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
       { _key: 60003760, solarSystemID: 30000142, ownerID: 1000035 },
     ]),
     "types.jsonl": jsonl([
-      { _key: 123456789, name: { en: "Large ID" }, groupID: 25, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 3 },
+      { _key: 123456789, name: { en: "Large ID" }, groupID: 462, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 3 },
+      { _key: 123456788, name: { en: "Ore" }, groupID: 462, marketGroupID: 64, published: true, portionSize: 100, packagedVolume: 1 },
+      { _key: 123456787, name: { en: "Ice" }, groupID: 465, marketGroupID: 64, published: true, portionSize: 100, packagedVolume: 1 },
+      { _key: 123456786, name: { en: "Other item" }, groupID: 25, marketGroupID: 64, published: true, portionSize: 1, packagedVolume: 1 },
     ]),
-    "groups.jsonl": jsonl([{ _key: 25, categoryID: 6 }]),
+    "groups.jsonl": jsonl([
+      { _key: 25, categoryID: 6, name: { en: "Ships" } },
+      { _key: 462, categoryID: 25, name: { en: "Veldspar" } },
+      { _key: 465, categoryID: 25, name: { en: "Ice" } },
+    ]),
     "npcCorporations.jsonl": jsonl([]),
     "marketGroups.jsonl": jsonl([
       { _key: 64, name: { en: "Ships" } },
@@ -121,6 +128,9 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
         _key: 123456789,
         materials: [{ materialTypeID: 34, quantity: 175 }],
       },
+      { _key: 123456788, materials: [{ materialTypeID: 34, quantity: 175 }] },
+      { _key: 123456787, materials: [{ materialTypeID: 16272, quantity: 100 }] },
+      { _key: 123456786, materials: [{ materialTypeID: 34, quantity: 5 }] },
     ]),
     "cloneGrades.jsonl": jsonl([
       {
@@ -151,8 +161,12 @@ it("extracts manufacturing recipes, Alpha caps and reprocessing materials withou
   expect(data.reprocessing).toEqual([
     {
       typeId: "123456789",
+      outputRounding: "ceil",
       materials: [{ typeId: "34", quantity: 175 }],
     },
+    { typeId: "123456788", outputRounding: "ceil", materials: [{ typeId: "34", quantity: 175 }] },
+    { typeId: "123456787", outputRounding: "nearest", materials: [{ typeId: "16272", quantity: 100 }] },
+    { typeId: "123456786", outputRounding: "floor", materials: [{ typeId: "34", quantity: 5 }] },
   ]);
   expect(data.alphaSkillCaps).toEqual({ Amarr: { "3380": 3 } });
 });
@@ -170,6 +184,8 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
   const outside = [...oldZone].find((id) => !newZone.has(id))!;
   const old = {
     ...data,
+    schemaVersion: 1,
+    reprocessing: data.reprocessing?.map(({ outputRounding: _rounding, ...recipe }) => recipe),
     zone: [...oldZone],
     stations: [
       ...data.stations.filter((s) => s.systemId !== "30002510"),
@@ -193,6 +209,8 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
         "2026-10-02T00:00:00Z",
       );
     const service = new MarketService(store, "resources", false);
+    expect(service.data?.schemaVersion).toBe(2);
+    expect(service.data?.reprocessing?.find((recipe) => recipe.typeId === "1230")?.outputRounding).toBe("ceil");
     expect(service.data?.zone.length).toBe(4);
     expect(service.data?.stations.length).toBe(34);
     expect(service.data?.regions.length).toBe(4);
@@ -200,6 +218,7 @@ it("existing five-jump cache is narrowed on startup without deleting selected de
       false,
     );
     expect(readStatic(store)?.zone.length).toBe(4);
+    expect(readStatic(store)?.schemaVersion).toBe(2);
     expect(store.sql.prepare("SELECT id FROM deals").get()).toEqual({
       id: "kept",
     });
