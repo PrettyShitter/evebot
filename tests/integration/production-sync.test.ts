@@ -33,6 +33,12 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
       quantity: 1, unit_price: "250000", is_buy: true, is_personal: true,
       client_id: "9001", journal_ref_id: "99002",
     }), marketAt);
+  db.sql.prepare("INSERT INTO wallet_transactions VALUES (?,?,?,?,?)")
+    .run("esi", "9001", "99003", JSON.stringify({
+      transaction_id: "99003", date: marketAt, type_id: "684", location_id: "60003760",
+      quantity: 1, unit_price: "200000", is_buy: true, is_personal: true,
+      client_id: "9001", journal_ref_id: "99004",
+    }), marketAt);
   const marketLevels = [
     ...[
       ["34", 64000], ["35", 12000], ["36", 5000], ["37", 1000],
@@ -515,11 +521,52 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
         blueprintPaybackBatches: { immediate: expect.any(Number) },
       },
     });
-    expect((await request(undefined, {
+    const pinnedMarketBpo = await request(undefined, {
       kind: "production.project.pin",
       projectId: "00000000-0000-4000-8000-000000000099",
       offerId: marketBpoOffer!.id,
+    });
+    expect(pinnedMarketBpo.error).toBeUndefined();
+    expect(pinnedMarketBpo.value?.production.projects.find((project) => project.id === "00000000-0000-4000-8000-000000000099"))
+      .toMatchObject({
+        status: "pinned",
+        bpoAcquisition: {
+          blueprintTypeName: "Condor Blueprint",
+          locationId: "60003760",
+          expectedPrice: "200000",
+          status: "purchase_required",
+        },
+      });
+    expect((await request(undefined, {
+      kind: "production.project.start", projectId: "00000000-0000-4000-8000-000000000099",
     })).error).toContain("купите BPO");
+
+    const acquiredAt = new Date().toISOString();
+    const acquiredCondorBpo: OwnProductionData = {
+      ...own,
+      at: acquiredAt,
+      blueprints: [...own.blueprints, {
+        item_id: "9103", type_id: "684", location_id: "60003760", location_flag: "Hangar",
+        quantity: -1, material_efficiency: 0, time_efficiency: 0, runs: -1,
+      }],
+    };
+    const acquiredSync = await request({
+      kind: "production-data", characterId: "9001", profile: { ...profile, at: acquiredAt },
+      own: acquiredCondorBpo, publicData: { ...publicData, at: acquiredAt },
+    });
+    expect(acquiredSync.error).toBeUndefined();
+    const confirmedMarketBpoCost = await request(undefined, {
+      kind: "production.blueprint.cost.confirm", blueprintItemId: "9103", transactionId: "99003",
+    });
+    expect(confirmedMarketBpoCost.error).toBeUndefined();
+    expect(confirmedMarketBpoCost.value?.production.projects.find((project) => project.id === "00000000-0000-4000-8000-000000000099")?.bpoAcquisition)
+      .toMatchObject({ status: "ready" });
+    const startedMarketBpo = await request(undefined, {
+      kind: "production.project.start", projectId: "00000000-0000-4000-8000-000000000099",
+    });
+    expect(startedMarketBpo.error).toBeUndefined();
+    expect(startedMarketBpo.value?.production.projects.find((project) => project.id === "00000000-0000-4000-8000-000000000099"))
+      .toMatchObject({ status: "purchasing", bpoAcquisition: null });
     const acquiredBlueprintOffer = confirmedNpc.value?.production.offers.find((offer) => offer.estimate.blueprintItemId === "9102");
     expect(acquiredBlueprintOffer?.estimate.totalCost).toBeTruthy();
     expect(Number(acquiredBlueprintOffer?.estimate.totalCost) - Number(acquiredBlueprintOffer?.estimate.cashRequired)).toBeCloseTo(500, 2);

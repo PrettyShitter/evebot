@@ -713,7 +713,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                             size="sm"
                             variant="outline"
                             className="mt-2"
-                            disabled={busy || state.demo || !offer.chainExecutable}
+                            disabled={busy || state.demo || (!offer.chainExecutable && !(offer.blueprintSource.kind === "market_bpo" && offer.chainPlan.status === "ready" && offer.estimate.status === "ready"))}
                             onClick={() => void request({
                               kind: "production.project.pin",
                               projectId: crypto.randomUUID(),
@@ -722,7 +722,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                           >
                             Закрепить план
                           </Button>
-                          {!offer.chainExecutable && <div className="caption mt-1 text-amber-300">{offer.blueprintSource.kind === "market_bpo" ? "После покупки оригинала и синхронизации он станет доступен для закрепления и старта проекта." : "Полная цепочка не подтверждена, проект нельзя начать."}</div>}
+                          {!offer.chainExecutable && <div className="caption mt-1 text-amber-300">{offer.blueprintSource.kind === "market_bpo" && offer.chainPlan.status === "ready" && offer.estimate.status === "ready" ? "План можно закрепить сейчас. Для старта купите BPO вручную, синхронизируйте чертежи и подтвердите покупку по кошельку." : "Полная цепочка не подтверждена, проект нельзя начать."}</div>}
                         </td>
                       </tr>
                     ))}
@@ -1174,6 +1174,19 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                   <Metric label="Сейчас по sell-ордерам · весь выпуск" value={isk(project.currentExpectedProfit.sellOrder)} />
                   <Metric label="Фактически реализовано" value={isk(project.realizedProfit)} />
                 </div>
+                {project.bpoAcquisition && (
+                  <div className="rounded-md border border-amber-400/40 p-3" role="status">
+                    <div className="text-sm font-medium">Приобретение чертежа BPO</div>
+                    <p className="caption mt-1"><CopyName name={project.bpoAcquisition.blueprintTypeName} onCopy={copyName} /> · {project.bpoAcquisition.locationName} · цена предложения {isk(project.bpoAcquisition.expectedPrice)}</p>
+                    <p className="caption mt-1 text-amber-300">{{
+                      purchase_required: "Купите оригинал в игре и синхронизируйте чертежи основы.",
+                      sync_required: "Синхронизируйте купленный оригинал и подтвердите его цену по записи кошелька.",
+                      price_confirmation_required: "BPO найден в синхронизации; сопоставьте точную покупку в кошельке, чтобы начать проект.",
+                      ambiguous: "Найдено несколько подходящих BPO. Оставьте один подтверждённый оригинал или закрепите план заново.",
+                      ready: "Покупка BPO подтверждена; план можно начать с актуальной сметой.",
+                    }[project.bpoAcquisition.status]}</p>
+                  </div>
+                )}
                 {project.productionSchedule && (
                   <div className="rounded-md border border-border p-3">
                     <div className="text-sm font-medium">Оставшееся производство</div>
@@ -1366,7 +1379,7 @@ export function ProductionView({ state, busy, request, openSettings }: Props) {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {project.status === "pinned" && (
-                    <Button disabled={busy || state.demo} onClick={() => void request({ kind: "production.project.start", projectId: project.id })}>
+                    <Button disabled={busy || state.demo || project.bpoAcquisition?.status === "purchase_required" || project.bpoAcquisition?.status === "sync_required" || project.bpoAcquisition?.status === "price_confirmation_required" || project.bpoAcquisition?.status === "ambiguous"} onClick={() => void request({ kind: "production.project.start", projectId: project.id })}>
                       Начать проект
                     </Button>
                   )}

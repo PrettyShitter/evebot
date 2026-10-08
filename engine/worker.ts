@@ -1970,6 +1970,12 @@ function productionSummary(): AppState["production"] {
         itemName: string;
         projectKind?: "manufacturing" | "reprocessing";
         facilityId?: string;
+        bpoAcquisition?: {
+          blueprintTypeId: string;
+          locationId: string;
+          expectedPrice: string;
+          pinnedAt: string;
+        };
         outputQuantity: number;
         expectedCost: string;
         expectedProfit: string | null;
@@ -2056,6 +2062,44 @@ function productionSummary(): AppState["production"] {
         "SELECT id,status,payload FROM project_nodes WHERE project_id=? AND node_type='manufacturing' ORDER BY rowid",
       ).all(project.id) as { id: string; status: string; payload: string }[];
       const projectFacilityId = payload.facilityId ?? ("facilityId" in payload.estimate ? payload.estimate.facilityId : null);
+      const bpoAcquisition: AppState["production"]["projects"][number]["bpoAcquisition"] =
+        project.status !== "pinned" || !payload.bpoAcquisition
+          ? null
+          : (() => {
+              const acquisition = payload.bpoAcquisition!;
+              const candidates = store.sql.prepare(
+                `SELECT b.item_id,s.price,c.confirmed_at
+                 FROM production_blueprint_instances b
+                 JOIN blueprint_sources s ON s.source_kind='owned' AND s.source_id=b.item_id
+                 LEFT JOIN blueprint_acquisition_confirmations c ON c.blueprint_item_id=b.item_id
+                 WHERE b.character_id=? AND b.blueprint_type_id=? AND b.location_id=? AND b.runs=-1
+                   AND b.observed_at>=? AND s.status='available'`,
+              ).all(main?.id ?? "", acquisition.blueprintTypeId, acquisition.locationId, acquisition.pinnedAt) as
+                { item_id: string; price: string | null; confirmed_at: string | null }[];
+              const walletPurchase = store.sql.prepare(
+                `SELECT 1 FROM wallet_transactions WHERE character_id=? AND json_extract(payload,'$.type_id')=?
+                   AND json_extract(payload,'$.location_id')=? AND json_extract(payload,'$.is_buy')=1
+                   AND json_extract(payload,'$.is_personal')=1 AND json_extract(payload,'$.date')>=? LIMIT 1`,
+              ).get(main?.id ?? "", acquisition.blueprintTypeId, acquisition.locationId, acquisition.pinnedAt);
+              const confirmed = candidates.filter((candidate) => candidate.price !== null && candidate.confirmed_at !== null && candidate.confirmed_at >= acquisition.pinnedAt);
+              const status = confirmed.length > 1
+                ? "ambiguous"
+                : confirmed.length === 1
+                  ? "ready"
+                  : candidates.length > 0
+                    ? "price_confirmation_required"
+                    : walletPurchase
+                      ? "sync_required"
+                    : "purchase_required";
+              return {
+                blueprintTypeId: acquisition.blueprintTypeId,
+                blueprintTypeName: productionStatic.types.find((type) => type.id === acquisition.blueprintTypeId)?.name ?? `Type ${acquisition.blueprintTypeId}`,
+                locationId: acquisition.locationId,
+                locationName: productionStatic.stations.find((station) => station.id === acquisition.locationId)?.name ?? `Объект ${acquisition.locationId}`,
+                expectedPrice: acquisition.expectedPrice,
+                status,
+              };
+            })();
       const currentExecutionFee: string | null = isReprocessing
         ? (() => {
             const confirmation = store.sql.prepare("SELECT payload FROM reprocessing_confirmations WHERE project_id=? ORDER BY confirmed_at DESC LIMIT 1")
@@ -2336,6 +2380,7 @@ function productionSummary(): AppState["production"] {
         runs: manufacturingEstimate?.runs ?? 0,
         updatedAt: project.updated_at,
         offerId: payload.offerId,
+        bpoAcquisition,
         manufacturingNodes,
         productionSchedule: projectSchedule,
         materials,
@@ -2645,8 +2690,49 @@ function pinProductionOffer(projectId: string, offerId: string) {
     })();
     return;
   }
+  if (offer.blueprintSource.kind === "market_bpo") {
+    if (offer.estimate.status !== "ready" || offer.chainPlan.status !== "ready" || !offer.estimate.blueprintTypeId || !offer.estimate.facilityId)
+      throw Error("Рыночный BPO нельзя закрепить: полная цепочка производства не подтверждена");
+    const staticData = market.data ?? bundledStatic;
+    const pinnedAt = new Date().toISOString();
+    const station = staticData.stations.find((item) => item.id === offer.estimate.facilityId);
+    const snapshot = station ? latestSnapshots(store, [station.regionId])[0] : undefined;
+    const snapshotId = randomUUID();
+    const main = portfolio.characters().find((character) => character.isSeller);
+    const profileAt = main
+      ? (store.sql.prepare("SELECT observed_at FROM production_character_profiles WHERE character_id=?").get(main.id) as { observed_at: string } | undefined)?.observed_at ?? null
+      : null;
+    const payload = {
+      offerId: offer.id, projectKind: "manufacturing", facilityId: offer.estimate.facilityId,
+      itemName: offer.itemName, itemEnglishName: offer.itemEnglishName,
+      blueprintTypeName: offer.blueprintTypeName, systemId: offer.systemId,
+      runs: offer.runs, outputQuantity: offer.estimate.outputQuantity,
+      expectedCost: offer.estimate.totalCost ?? offer.estimate.cashRequired ?? "0",
+      cashRequired: offer.estimate.cashRequired, expectedProfit: offer.estimate.firstCycleProfit.immediate,
+      estimate: offer.estimate, chainPlan: offer.chainPlan, source: "market-bpo-estimate",
+      bpoAcquisition: {
+        blueprintTypeId: offer.estimate.blueprintTypeId,
+        locationId: offer.estimate.facilityId,
+        expectedPrice: offer.blueprintSource.purchasePrice ?? offer.estimate.blueprintPurchaseCashCost ?? "0",
+        purchaseOrderId: offer.blueprintSource.purchaseOrderId,
+        pinnedAt,
+      },
+    };
+    store.sql.transaction(() => {
+      store.sql.prepare("INSERT INTO calculation_snapshots VALUES (?,?,?,?,?,?,?,?,?)")
+        .run(snapshotId, pinnedAt, JSON.stringify(snapshot ? [snapshot.id] : []), staticData.version,
+          profileAt, JSON.stringify([offer.estimate.facilityId]),
+          JSON.stringify({ fullMarketSnapshot: !!snapshot, source: "market BPO acquisition plan" }),
+          JSON.stringify(payload), offer.estimate.formulaVersion);
+      store.sql.prepare("INSERT INTO production_projects(id,status,created_at,updated_at,payload) VALUES (?,'pinned',?,?,?) ON CONFLICT(id) DO NOTHING")
+        .run(projectId, pinnedAt, pinnedAt, JSON.stringify({ ...payload, snapshotId }));
+      store.sql.prepare("INSERT INTO project_plan_versions VALUES (?,1,?,?,?) ON CONFLICT(project_id,version) DO NOTHING")
+        .run(projectId, pinnedAt, snapshotId, JSON.stringify(payload));
+    })();
+    return;
+  }
   if (offer.blueprintSource.kind !== "owned")
-    throw Error("Сначала купите BPO в игре и синхронизируйте чертежи основы");
+    throw Error("Нужен принадлежащий основе чертёж или доступное предложение BPO");
   const now = new Date().toISOString();
   const payload = {
     offerId: offer.id, projectKind: "manufacturing", facilityId: offer.estimate.facilityId,
@@ -2978,7 +3064,35 @@ function startProductionProject(projectId: string) {
   const project = store.sql.prepare("SELECT status,payload FROM production_projects WHERE id=?").get(projectId) as { status: string; payload: string } | undefined;
   if (!project) throw Error("Закреплённый проект не найден");
   if (project.status !== "pinned") return;
-  const pinned = JSON.parse(project.payload) as { offerId: string; projectKind?: string; facilityId?: string };
+  const pinned = JSON.parse(project.payload) as {
+    offerId: string; projectKind?: string; facilityId?: string;
+    bpoAcquisition?: { blueprintTypeId: string; locationId: string; pinnedAt: string };
+  };
+  if (pinned.bpoAcquisition) {
+    const acquired = store.sql.prepare(
+      `SELECT b.item_id,c.price,c.confirmed_at
+       FROM production_blueprint_instances b
+       JOIN blueprint_sources s ON s.source_kind='owned' AND s.source_id=b.item_id AND s.status='available'
+       JOIN blueprint_acquisition_confirmations c ON c.blueprint_item_id=b.item_id
+       WHERE b.character_id=? AND b.blueprint_type_id=? AND b.location_id=? AND b.runs=-1
+         AND b.observed_at>=? AND c.confirmed_at>=?
+       ORDER BY c.confirmed_at DESC,b.item_id`,
+    ).all(portfolio.characters().find((character) => character.isSeller)?.id ?? "",
+      pinned.bpoAcquisition.blueprintTypeId, pinned.bpoAcquisition.locationId,
+      pinned.bpoAcquisition.pinnedAt, pinned.bpoAcquisition.pinnedAt) as
+        { item_id: string; price: string; confirmed_at: string }[];
+    if (acquired.length !== 1)
+      throw Error(acquired.length > 1
+        ? "Найдено несколько купленных BPO этого типа. Оставьте один подтверждённый оригинал для проекта или закрепите план заново"
+        : "Для старта купите BPO, синхронизируйте чертежи и подтвердите его цену по истории кошелька основы");
+    const offer = productionSummary().offers.find((candidate) =>
+      candidate.blueprintSource.kind === "owned" && candidate.estimate.blueprintItemId === acquired[0]!.item_id &&
+      candidate.estimate.facilityId === pinned.bpoAcquisition!.locationId);
+    if (!offer || !offer.chainExecutable)
+      throw Error("Купленный BPO синхронизирован, но его план пока не готов. Обновите рынок и профиль производства");
+    startChainedManufacturingProject(projectId, project.payload, offer);
+    return;
+  }
   if (pinned.projectKind === "reprocessing") {
     const offer = productionSummary().reprocessingOffers.find((item) => item.id === pinned.offerId);
     if (!offer || offer.estimate.status !== "ready" || !offer.estimate.totalCost)

@@ -445,6 +445,14 @@ export interface AppState {
       runs: number;
       updatedAt: string;
       offerId: string;
+      bpoAcquisition: {
+        blueprintTypeId: string;
+        blueprintTypeName: string;
+        locationId: string;
+        locationName: string;
+        expectedPrice: string;
+        status: "purchase_required" | "sync_required" | "price_confirmation_required" | "ambiguous" | "ready";
+      } | null;
       manufacturingNodes: { id: string; blueprintItemId: string; blueprintTypeId: string; outputTypeId: string; outputQuantity: number; outputName: string; runs: number; status: string; isFinal: boolean; canStart: boolean; timeSeconds: number | null }[];
       productionSchedule: {
         status: "ready" | "review";
