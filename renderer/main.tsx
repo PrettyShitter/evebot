@@ -43,6 +43,7 @@ function App() {
     [settingsOpen, setSettingsOpen] = useState(false),
     [draft, setDraft] = useState<Settings | null>(null),
     [busy, setBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState("market");
   const lastAlert = useRef<string | null>(null);
   useEffect(() => {
     const alert = state?.notifications.at(-1);
@@ -83,7 +84,7 @@ function App() {
       if (inFlight) return;
       inFlight = true;
       void window.eve
-        .request({ kind: "state" })
+        .request({ kind: "state", includeProduction: activeTab === "production" })
         .then((s) => {
           if (alive) setState(s);
         })
@@ -95,12 +96,12 @@ function App() {
         });
     };
     refresh();
-    const timer = setInterval(refresh, 3000);
+    const timer = setInterval(refresh, 5000);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, []);
+  }, [activeTab]);
   if (!state)
     return (
       <main className="app">
@@ -203,7 +204,7 @@ function App() {
           {error}
         </div>
       )}
-      <Tabs defaultValue="market" className="mt-8">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
         <TabsList className="mb-5">
           <TabsTrigger value="market">
             <Orbit size={15} />

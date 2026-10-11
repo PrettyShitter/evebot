@@ -358,8 +358,7 @@ export function MarketView({
       <p className="caption mt-3">
         SDE {state.market.version} · {state.market.systems} систем ·{" "}
         {state.market.stations} станций · регионы {state.market.loadedRegions}/
-        {state.market.regions} · история {state.market.historyPairs}{" "}
-        товар/регион. {state.market.status}
+        {state.market.regions} · региональная история ESI. {state.market.status}
       </p>
       <details className="panel mt-5">
         <summary>Мои sell-ордера · {state.ownSellOrders?.length ?? 0}</summary>

@@ -10,7 +10,7 @@ it("stage 1: clean migration, persistence, rollback, backup and restored copy", 
   const path = join(dir, "portfolio.sqlite");
   let store = new Store(path, resolve("db/migrations"));
   try {
-    expect(store.sql.pragma("user_version", { simple: true })).toBe(12);
+    expect(store.sql.pragma("user_version", { simple: true })).toBe(13);
     expect(store.sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_structure_product_profiles'").get()).toEqual({ name: "production_structure_product_profiles" });
     expect(store.sql.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='production_contract_blueprint_confirmations'").get()).toEqual({ name: "production_contract_blueprint_confirmations" });
     store.saveSettings({ ...DEFAULT_SETTINGS, minProfit: "1234567" });
@@ -70,7 +70,7 @@ it("stage 1: upgrades a version-2 portfolio without losing existing deals or cha
 
   const upgraded = new Store(path, resolve("db/migrations"));
   try {
-    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(12);
+    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(13);
     expect(upgraded.sql.prepare("SELECT id FROM deals").get()).toEqual({
       id: "trade-1",
     });
@@ -113,7 +113,7 @@ it("stage 2: upgrades a populated version-11 database and enforces BPC confirmat
 
   const upgraded = new Store(path, resolve("db/migrations"));
   try {
-    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(12);
+    expect(upgraded.sql.pragma("user_version", { simple: true })).toBe(13);
     expect(upgraded.sql.prepare("SELECT id FROM deals WHERE id='trade-v11'").get()).toEqual({ id: "trade-v11" });
     expect(upgraded.sql.prepare("SELECT contract_id FROM production_contract_sources WHERE contract_id='contract-v11'").get()).toEqual({ contract_id: "contract-v11" });
     upgraded.sql.prepare("INSERT INTO production_contract_blueprint_confirmations VALUES (?,?,?,?,?,?,?,?)")

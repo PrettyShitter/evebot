@@ -2583,44 +2583,148 @@ let stateProductionCache:
   | {
       value: AppState["production"];
       validUntil: number;
-      databaseVersion: number;
+      includeOffers: boolean;
     }
   | undefined;
-function productionSummaryForState() {
-  const databaseVersion = store.sql.pragma("data_version", { simple: true }) as number;
+let stateReviewCache:
+  | {
+      value: AppState["review"];
+      validUntil: number;
+    }
+  | undefined;
+const STATE_SUMMARY_CACHE_MS = 15_000;
+function emptyProductionSummary(): AppState["production"] {
+  return {
+    status: "Откройте вкладку «Производство», чтобы загрузить расчёты",
+    syncing: false,
+    syncError: null,
+    mainBalance: null,
+    spendableCapital: null,
+    reservedCapital: "0",
+    tradeReservedCapital: "0",
+    capitalCommitmentConflict: false,
+    mainCharacterId: null,
+    race: null,
+    alphaUsableSkills: 0,
+    alphaCappedSkills: 0,
+    profileAt: null,
+    missingScopes: [],
+    optionalMissingScopes: [],
+    structureMarketCoverage: [],
+    assets: 0,
+    blueprints: 0,
+    blueprintAcquisitions: [],
+    jobs: 0,
+    availableJobs: [],
+    contracts: 0,
+    facilities: 0,
+    systemIndices: 0,
+    adjustedPrices: 0,
+    contractCoverage: {
+      candidateContracts: 0,
+      fetchedContracts: 0,
+      capped: false,
+      complete: false,
+      itemErrors: 0,
+    },
+    blueprintContracts: [],
+    syncedAt: null,
+    publicSyncedAt: null,
+    manufacturingRecipes: 0,
+    reprocessingTypes: 0,
+    sdeVersion: null,
+    facilityOptions: [],
+    facilityProfiles: [],
+    manufacturingOutputs: [],
+    offers: [],
+    marketBpoCandidatesScanned: 0,
+    marketBpoCandidatesTotal: 0,
+    marketBpoScanComplete: false,
+    contractCandidatesScanned: 0,
+    contractCandidatesTotal: 0,
+    contractScanComplete: false,
+    contractOffers: [],
+    reprocessingOffers: [],
+    projects: [],
+  };
+}
+function productionSummaryForState(includeOffers: boolean) {
+  if (!includeOffers) {
+    if (
+      stateProductionCache &&
+      stateProductionCache.validUntil > Date.now() &&
+      !stateProductionCache.includeOffers
+    )
+      return stateProductionCache.value;
+    const value = emptyProductionSummary();
+    stateProductionCache = {
+      value,
+      validUntil: Date.now() + STATE_SUMMARY_CACHE_MS,
+      includeOffers: false,
+    };
+    return value;
+  }
+  const scanningOffers =
+    !productionOfferCache.marketBpoScanComplete ||
+    !productionOfferCache.contractScanComplete;
   if (
     stateProductionCache &&
     stateProductionCache.validUntil > Date.now() &&
-    stateProductionCache.databaseVersion === databaseVersion
+    stateProductionCache.includeOffers === includeOffers &&
+    (!includeOffers || !scanningOffers)
   )
     return stateProductionCache.value;
   const value = productionSummary();
   stateProductionCache = {
     value,
-    validUntil: Date.now() + 1_000,
-    databaseVersion,
+    validUntil: Date.now() + STATE_SUMMARY_CACHE_MS,
+    includeOffers,
   };
   return value;
+}
+function reviewForState() {
+  if (
+    stateReviewCache &&
+    stateReviewCache.validUntil > Date.now()
+  )
+    return stateReviewCache.value;
+  const value = reconciler.review();
+  stateReviewCache = {
+    value,
+    validUntil: Date.now() + STATE_SUMMARY_CACHE_MS,
+  };
+  return value;
+}
+function invalidateReviewState() {
+  stateReviewCache = undefined;
 }
 function invalidateProductionState() {
   stateProductionCache = undefined;
 }
-function state(): AppState {
+function state(includeProduction = true): AppState {
   const benchmark = process.env.EVE_BENCHMARK === "1";
   const stateStarted = benchmark ? performance.now() : 0;
   const b = portfolio.currentBudget();
   const productionStarted = benchmark ? performance.now() : 0;
-  const production = productionSummaryForState();
+  const production = productionSummaryForState(includeProduction);
   const opportunitiesStarted = benchmark ? performance.now() : 0;
   const opportunities = candidates();
   const detailStarted = benchmark ? performance.now() : 0;
+  const marketSummary = market.summary();
+  const ownOrdersStarted = benchmark ? performance.now() : 0;
+  const orders = ownSellOrders(store);
+  const reviewStarted = benchmark ? performance.now() : 0;
+  const review = reviewForState();
+  const dealsStarted = benchmark ? performance.now() : 0;
+  const deals = trades.list();
+  const detailsMs = benchmark ? performance.now() - dealsStarted : 0;
   const result: AppState = {
     production,
     devBuild: config.devBuild ?? false,
     demo: config.demo,
-    ownSellOrders: ownSellOrders(store),
+    ownSellOrders: orders,
     notifications,
-    review: reconciler.review(),
+    review,
     systemNames: Object.fromEntries(
       (market.data?.systems ?? []).map((s) => [s.id, s.name]),
     ),
@@ -2629,7 +2733,7 @@ function state(): AppState {
     settings: store.getSettings(),
     characters: portfolio.characters(),
     opportunities,
-    deals: trades.list(),
+    deals,
     available: b.available,
     wallet: b.wallet,
     reserved: b.reserved,
@@ -2639,13 +2743,13 @@ function state(): AppState {
       ? "DEMO · воспроизводимые данные"
       : portfolio.characters().length === 3
         ? "Синхронизация по кешу ESI · " +
-          market.summary().loadedRegions +
+          marketSummary.loadedRegions +
           "/" +
-          market.summary().regions +
+          marketSummary.regions +
           " регионов"
         : "Подключите три персонажа",
     market: {
-      ...market.summary(),
+      ...marketSummary,
       calculation: calculationProgress,
       status: calculationBusy
         ? "Расчёт торговых возможностей… Рынок и кошельки доступны."
@@ -2660,6 +2764,9 @@ function state(): AppState {
         productionMs: opportunitiesStarted - productionStarted,
         opportunitiesMs: detailStarted - opportunitiesStarted,
         detailMs: performance.now() - detailStarted,
+        ownOrdersMs: reviewStarted - ownOrdersStarted,
+        reviewMs: dealsStarted - reviewStarted,
+        dealsMs: detailsMs,
         totalMs: performance.now() - stateStarted,
         offerCount: opportunities.length,
         productionOfferCount: production.offers.length,
@@ -3792,8 +3899,15 @@ parentPort!.on(
         message.internal &&
         message.internal.kind !== "suspend" &&
         message.internal.kind !== "resume"
-      )
+      ) {
         invalidateProductionState();
+      }
+      if (
+        message.internal?.kind === "wallets" ||
+        message.internal?.kind === "connected"
+      ) {
+        invalidateReviewState();
+      }
       if (message.internal?.kind === "suspend") market.scheduler.suspend();
       if (message.internal?.kind === "resume") market.scheduler.resume();
       if (message.internal?.kind === "public-production") {
@@ -4190,6 +4304,22 @@ parentPort!.on(
         request.kind === "static.update"
       )
         invalidateProductionState();
+      if (
+        [
+          "wallet.sync",
+          "deal.reconcile",
+          "deal.accept",
+          "purchase.bind",
+          "transfer.confirm",
+          "expense.bind",
+          "expenses.confirm",
+          "deal.cancel",
+          "demo.operations",
+          "character.connect",
+          "character.disconnect",
+        ].includes(request.kind)
+      )
+        invalidateReviewState();
       if (request.kind === "character.disconnect")
         portfolio.disconnect(request.id);
       if (request.kind === "quote")
@@ -4427,7 +4557,20 @@ parentPort!.on(
         );
       if (request.kind === "backup" && message.backupPath)
         await store.backup(message.backupPath);
-      parentPort!.postMessage({ id: message.id, value: state() });
+      parentPort!.postMessage({
+        id: message.id,
+        value: state(
+          request.kind === "state"
+            ? request.includeProduction !== false
+            : request.kind.startsWith("production.") ||
+                [
+                  "wallet.sync",
+                  "character.connect",
+                  "character.disconnect",
+                  "static.update",
+                ].includes(request.kind),
+        ),
+      });
     } catch (error) {
       parentPort!.postMessage({
         id: message.id,

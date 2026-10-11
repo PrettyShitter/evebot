@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 import type { Reconciler } from "../../engine/accounting/reconcile";
 export const requestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("state") }).strict(),
+  z.object({ kind: z.literal("state"), includeProduction: z.boolean().optional() }).strict(),
   z.object({ kind: z.literal("update.check") }).strict(),
   z.object({ kind: z.literal("update.download") }).strict(),
   z.object({ kind: z.literal("update.install") }).strict(),
@@ -506,7 +506,6 @@ export interface AppState {
     stations: number;
     regions: number;
     loadedRegions: number;
-    historyPairs: number;
     status: string;
     calculation: {
       busy: boolean;

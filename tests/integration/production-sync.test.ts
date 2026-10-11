@@ -251,9 +251,15 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
           min_volume: 1, range: "station", duration: 90, issued: at,
         }],
       }],
-    });
+    }, { kind: "state", includeProduction: false });
     expect(first.error).toBeUndefined();
-    expect(first.value?.production).toMatchObject({
+    expect(first.value?.production.marketBpoCandidatesScanned).toBe(0);
+    expect(first.value?.production.contractCandidatesScanned).toBe(0);
+    const firstProduction = await request(undefined, {
+      kind: "state",
+      includeProduction: true,
+    });
+    expect(firstProduction.value?.production).toMatchObject({
       mainCharacterId: "9001",
       race: "Minmatar",
       assets: 1,

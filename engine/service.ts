@@ -14,11 +14,20 @@ import { syncRegion, latestSnapshots } from "./market/snapshots";
 import { syncHistory } from "./history/history";
 import { excludedMarketTypeIds } from "./market/classification";
 import { CENTERS } from "./routes/graph";
+interface MarketSummary {
+  version: string | null;
+  systems: number;
+  stations: number;
+  regions: number;
+  loadedRegions: number;
+  status: string;
+}
 export class MarketService {
   readonly client = new EsiClient();
   readonly scheduler = new Scheduler();
   data: StaticData | null;
   private searchLocations = new Set<string>();
+  private summaryCache: Omit<MarketSummary, "status"> | undefined;
   status = "Рынок ещё не загружен";
   constructor(
     private store: Store,
@@ -103,6 +112,7 @@ export class MarketService {
               excludedTypes,
             );
             this.status = "Рынок обновлён; история загружается отдельно";
+            this.summaryCache = undefined;
             this.queueHistory(region);
             return r.expires;
           } catch (e) {
@@ -152,7 +162,9 @@ export class MarketService {
       throw e;
     }
   }
-  summary() {
+  summary(): MarketSummary {
+    if (this.summaryCache)
+      return { ...this.summaryCache, status: this.status };
     const regions = this.data?.regions ?? [];
     const r = this.store.sql
       .prepare(
@@ -162,20 +174,13 @@ export class MarketService {
     const completed = regions.filter((id) =>
       r.some((x) => x.region_id === id),
     ).length;
-    return {
+    this.summaryCache = {
       version: this.data?.version ?? null,
       systems: this.data?.zone.length ?? 0,
       stations: this.data?.stations.length ?? 0,
       regions: regions.length,
       loadedRegions: completed,
-      historyPairs: (
-        this.store.sql
-          .prepare(
-            "SELECT count(*) n FROM (SELECT DISTINCT type_id,region_id FROM regional_history)",
-          )
-          .get() as { n: number }
-      ).n,
-      status: this.status,
     };
+    return { ...this.summaryCache, status: this.status };
   }
 }

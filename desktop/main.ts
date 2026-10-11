@@ -50,6 +50,7 @@ const UPDATE_BACKUP_TIMEOUT_MS = 10 * 60_000;
 const UPDATE_STARTUP_TIMEOUT_MS = 3 * 60_000;
 let engineReady = false;
 let engineFailed = false;
+const coalescedStateRequests = new Map<boolean, Promise<AppState>>();
 const pending = new Map<
   string,
   {
@@ -113,9 +114,27 @@ function requestEngine(
   request: unknown,
   backupPath?: string,
   internal?: unknown,
-  timeoutMs = ENGINE_REQUEST_TIMEOUT_MS,
+  timeoutMs = engineReady
+    ? ENGINE_REQUEST_TIMEOUT_MS
+    : UPDATE_STARTUP_TIMEOUT_MS,
 ) {
-  return new Promise<AppState>((resolve, reject) => {
+  const coalesce =
+    !backupPath &&
+    !internal &&
+    typeof request === "object" &&
+    request !== null &&
+    "kind" in request &&
+    request.kind === "state";
+  const includeProduction =
+    typeof request === "object" &&
+    request !== null &&
+    "includeProduction" in request &&
+    request.includeProduction === false
+      ? false
+      : true;
+  if (coalesce && coalescedStateRequests.has(includeProduction))
+    return coalescedStateRequests.get(includeProduction)!;
+  const operation = new Promise<AppState>((resolve, reject) => {
     const id = crypto.randomUUID();
     const timer = setTimeout(() => {
       pending.delete(id);
@@ -124,6 +143,15 @@ function requestEngine(
     pending.set(id, { resolve, reject, timer });
     worker.postMessage({ id, request, backupPath, internal });
   });
+  if (coalesce) {
+    coalescedStateRequests.set(includeProduction, operation);
+    const clear = () => {
+      if (coalescedStateRequests.get(includeProduction) === operation)
+        coalescedStateRequests.delete(includeProduction);
+    };
+    void operation.then(clear, clear);
+  }
+  return operation;
 }
 app.setName("EVE Trader");
 if (process.env.EVE_USER_DATA)
@@ -276,7 +304,9 @@ app.whenReady().then(async () => {
       if (syncWorker !== worker)
         throw Error("Портфель изменился во время синхронизации");
       const result = await requestEngine(
-        req.kind === "deal.reconcile" ? req : { kind: "state" },
+        req.kind === "deal.reconcile"
+          ? req
+          : { kind: "state", includeProduction: false },
         undefined,
         { kind: "wallets", wallets, profile, scopes },
       );
@@ -312,16 +342,18 @@ app.whenReady().then(async () => {
       if (syncWorker !== worker)
         throw Error("Портфель изменился во время синхронизации");
       await requestEngine(
-        { kind: "state" },
+        { kind: "state", includeProduction: false },
         undefined,
         { kind: "public-production", publicData },
       );
       productionSyncError = null;
-      if (!mainCharacter) return requestEngine({ kind: "state" });
+      if (!mainCharacter)
+        return requestEngine({ kind: "state", includeProduction: false });
       const record = await vault.read(mainCharacter.id);
-      if (!record) return requestEngine({ kind: "state" });
+      if (!record)
+        return requestEngine({ kind: "state", includeProduction: false });
       await requestEngine(
-        { kind: "state" },
+        { kind: "state", includeProduction: false },
         undefined,
         {
           kind: "production-scopes",
@@ -360,7 +392,7 @@ app.whenReady().then(async () => {
       if (syncWorker !== worker)
         throw Error("Портфель изменился во время синхронизации");
       return requestEngine(
-        { kind: "state" },
+        { kind: "state", includeProduction: false },
         undefined,
         {
           kind: "production-data",
@@ -551,7 +583,7 @@ app.whenReady().then(async () => {
   tray.on("click", () => window.show());
   const background = setInterval(() => {
     if (!demo && !syncing && !installingUpdate)
-      void requestEngine({ kind: "state" })
+      void requestEngine({ kind: "state", includeProduction: false })
         .then((s) =>
           s.characters.length === 3 &&
           s.characters.every((c) => c.status !== "revoked")
@@ -564,14 +596,14 @@ app.whenReady().then(async () => {
   powerMonitor.on(
     "suspend",
     () =>
-      void requestEngine({ kind: "state" }, undefined, {
+      void requestEngine({ kind: "state", includeProduction: false }, undefined, {
         kind: "suspend",
       }).catch(() => {}),
   );
   powerMonitor.on(
     "resume",
     () =>
-      void requestEngine({ kind: "state" }, undefined, {
+      void requestEngine({ kind: "state", includeProduction: false }, undefined, {
         kind: "resume",
       }).catch(() => {}),
   );
@@ -587,7 +619,7 @@ app.whenReady().then(async () => {
     // market state may take much longer while its background calculation runs.
     macUpdates?.acknowledgeHealthy(process.argv);
   }
-  const initialState = await requestEngine({ kind: "state" });
+  const initialState = await requestEngine({ kind: "state", includeProduction: false });
   if (!demo && process.env.EVE_BENCHMARK !== "1") {
     const wallets =
       initialState.characters.length === 3 &&
