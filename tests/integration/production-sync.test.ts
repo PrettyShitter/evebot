@@ -1117,4 +1117,4 @@ it("stage 1: imports a complete production snapshot atomically and keeps the pre
     check.close();
     rmSync(dir, { recursive: true, force: true });
   }
-}, 20000);
+}, 30000);

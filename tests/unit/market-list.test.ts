@@ -10,6 +10,8 @@ const offer = (id: string, at: string) => ({
   purchase: { total: "500", fills: [{ price: "100" }] },
   buy: { result: { profit: "100" }, fullROI: "0.2" },
   sell: { profit: "90", roi: "0.18" },
+  rankingScore: "1",
+  rankedBy: "buy" as const,
   liquidity: { sellQuantity: 10, reasons: [] },
 });
 
@@ -26,7 +28,7 @@ describe("market list background updates", () => {
     expect(whileLoading[0]).toBe(old);
     expect(whileLoading[1]).toBe(unchanged);
 
-    const updated = { ...offer("same", "2"), quantity: 4 },
+    const updated = { ...offer("same", "2"), quantity: 4, rankingScore: "2" },
       added = offer("new", "2");
     const complete = mergeOfferRows(
       whileLoading,
@@ -47,5 +49,20 @@ describe("market list background updates", () => {
     expect(
       mergeOfferRows(current, [offer("two", "3")], false, true),
     ).toEqual([offer("two", "3")]);
+  });
+
+  it("sorts new and refreshed offers by the current profit ranking", () => {
+    const current = [
+      { ...offer("old", "1"), rankingScore: "2" },
+      { ...offer("low", "1"), rankingScore: "1" },
+    ];
+    const newOffer = { ...offer("new", "2"), rankingScore: "3" };
+    const refreshed = { ...offer("old", "2"), rankingScore: "0.5" };
+
+    expect(
+      mergeOfferRows(current, [refreshed, current[1], newOffer], true).map(
+        (row) => row.id,
+      ),
+    ).toEqual(["new", "low", "old"]);
   });
 });

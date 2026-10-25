@@ -5,6 +5,7 @@ import {
   Orbit,
   ArrowLeftRight,
   History,
+  Factory,
   Radio,
   Database,
   ChevronRight,
@@ -216,6 +217,10 @@ function App() {
             <History size={15} />
             Закрытые сделки
           </TabsTrigger>
+          <TabsTrigger value="production">
+            <Factory size={15} />
+            Производство
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="market">
           {state.opportunities.length || state.characters.length === 3 ? (
@@ -246,6 +251,7 @@ function App() {
         <TabsContent value="closed">
           <DealsView state={state} request={request} busy={busy} closed />
         </TabsContent>
+        <TabsContent value="production" />
       </Tabs>
       <footer className="footer">
         <span className="flex gap-2 items-center">

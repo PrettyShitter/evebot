@@ -2,7 +2,7 @@ import { test, expect, _electron as electron } from "@playwright/test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-test("shell: three trading tabs, restricted preload and settings survive restart", async () => {
+test("shell: trading tabs, restricted preload and settings survive restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "eve-e2e-"));
   const launch = () =>
     electron.launch({
@@ -27,8 +27,8 @@ test("shell: three trading tabs, restricted preload and settings survive restart
       page.getByText("История начинается с первой сделки"),
     ).toBeVisible();
     await page.getByRole("tab", { name: "Рынок", exact: true }).click();
-    await expect(page.getByRole("tab")).toHaveCount(3);
-    await expect(page.getByRole("tab", { name: /производство/i })).toHaveCount(0);
+    await expect(page.getByRole("tab")).toHaveCount(4);
+    await expect(page.getByRole("tab", { name: /производство/i })).toBeVisible();
     expect(
       await page.evaluate(
         () => typeof (window as unknown as { require?: unknown }).require,
