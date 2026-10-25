@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Store } from "../db/store";
-import { EsiClient } from "./esi/client";
+import { EsiClient, SqliteEsiResponseCache } from "./esi/client";
 import { Scheduler } from "./esi/scheduler";
 import {
   downloadSde,
@@ -23,7 +23,7 @@ interface MarketSummary {
   status: string;
 }
 export class MarketService {
-  readonly client = new EsiClient();
+  readonly client: EsiClient;
   readonly scheduler = new Scheduler();
   data: StaticData | null;
   private searchLocations = new Set<string>();
@@ -34,6 +34,7 @@ export class MarketService {
     resources: string,
     readonly demo: boolean,
   ) {
+    this.client = new EsiClient(fetch, Date.now, demo ? undefined : new SqliteEsiResponseCache(store.market));
     const persisted = readStatic(store);
     this.data = persisted;
     if (!demo) {
@@ -65,7 +66,8 @@ export class MarketService {
     if (this.data && !demo) {
       const narrowed = withSearchZone(this.data);
       if (
-        Number(narrowed.schemaVersion ?? 1) > Number(persisted?.schemaVersion ?? 1) ||
+        !persisted ||
+        Number(narrowed.schemaVersion ?? 1) > Number(persisted.schemaVersion ?? 1) ||
         JSON.stringify(narrowed.zone) !== JSON.stringify(this.data.zone) ||
         JSON.stringify(narrowed.stations) !== JSON.stringify(this.data.stations)
       ) {
@@ -74,7 +76,7 @@ export class MarketService {
       this.data = narrowed;
     }
     this.searchLocations = new Set(this.data?.stations.map((s) => s.id) ?? []);
-    store.sql
+    store.market
       .prepare(
         "UPDATE market_snapshot_runs SET status='interrupted' WHERE status='loading'",
       )
@@ -130,7 +132,7 @@ export class MarketService {
     if (!generation) return;
     const types = new Set(
       (
-        this.store.sql
+        this.store.market
           .prepare(
             "SELECT DISTINCT type_id FROM market_orders WHERE generation=?",
           )
@@ -166,7 +168,7 @@ export class MarketService {
     if (this.summaryCache)
       return { ...this.summaryCache, status: this.status };
     const regions = this.data?.regions ?? [];
-    const r = this.store.sql
+    const r = this.store.market
       .prepare(
         "SELECT region_id,count(*) n FROM market_snapshot_runs WHERE status='complete' GROUP BY region_id",
       )

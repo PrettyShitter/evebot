@@ -13,7 +13,7 @@ export async function syncRegion(
 ) {
   const id = randomUUID(),
     start = new Date(clock()).toISOString();
-  store.sql
+  store.market
     .prepare("INSERT INTO market_snapshot_runs VALUES (?,?,?,?,?,?,?,?)")
     .run(id, region, start, null, null, null, "loading", 0);
   try {
@@ -21,18 +21,18 @@ export async function syncRegion(
       `/markets/${region}/orders?order_type=all&page=1`,
     );
     const orders: Order[] = [];
-    const productionExcludedOrders: Order[] = [];
     let expiry = first.expires;
+    let unchanged = first.notModified;
     const seen = new Set<string>();
     const acceptPage = (page: Awaited<ReturnType<EsiClient["get"]>>) => {
+      unchanged = unchanged && page.notModified;
       if (page.pages !== first.pages || page.modified !== first.modified)
         throw Error("Страницы рынка относятся к разным поколениям");
       for (const order of z.array(orderSchema).parse(page.body)) {
         if (seen.has(order.order_id))
           throw Error("Дубли ордеров между страницами");
         seen.add(order.order_id);
-        if (excludedTypes?.has(order.type_id)) productionExcludedOrders.push(order);
-        else orders.push(order);
+        if (!excludedTypes?.has(order.type_id)) orders.push(order);
       }
       expiry = Math.min(expiry, page.expires);
     };
@@ -53,9 +53,21 @@ export async function syncRegion(
       for (const page of pages) acceptPage(page);
     }
     if (!first.modified) throw Error("ESI не сообщил время снимка");
+    if (unchanged) {
+      const prior = store.market.prepare(
+        "SELECT id,modified_at FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1",
+      ).get(region) as { id: string; modified_at: string } | undefined;
+      if (prior && prior.modified_at === first.modified) {
+        store.market.prepare("UPDATE market_snapshot_runs SET expires_at=? WHERE id=?")
+          .run(new Date(expiry).toISOString(), prior.id);
+        store.market.prepare("DELETE FROM market_snapshot_runs WHERE id=?").run(id);
+        const count = Number((store.market.prepare("SELECT count(*) n FROM market_orders WHERE generation=?").get(prior.id) as { n: number }).n);
+        return { id: prior.id, count, expires: expiry, unchanged: true };
+      }
+    }
     const npc = new Set(
       (
-        store.sql
+        store.market
           .prepare("SELECT id FROM stations WHERE region_id=?")
           .all(region) as { id: string }[]
       ).map((s) => s.id),
@@ -75,8 +87,8 @@ export async function syncRegion(
     // persisted. The generation remains `loading` until every batch and its
     // station observations have been written, so readers keep using the last
     // complete snapshot.
-    const insertOrders = store.sql.transaction((batch: Order[]) => {
-      const insert = store.sql.prepare(
+    const insertOrders = store.market.transaction((batch: Order[]) => {
+      const insert = store.market.prepare(
         "INSERT INTO market_orders VALUES (?,?,?,?,?)",
       );
       for (const o of batch) {
@@ -97,64 +109,46 @@ export async function syncRegion(
         observed.set(key, item);
       }
     });
-    const insertProductionOrders = store.sql.transaction((batch: Order[]) => {
-      const insert = store.sql.prepare(
-        "INSERT INTO production_market_orders VALUES (?,?,?,?,?)",
-      );
-      for (const order of batch) {
-        if (allowedLocations && !allowedLocations.has(order.location_id)) continue;
-        insert.run(id, order.order_id, order.type_id, order.location_id, JSON.stringify(order));
-      }
-    });
     const batchSize = 1000;
     for (let offset = 0; offset < orders.length; offset += batchSize) {
       insertOrders(orders.slice(offset, offset + batchSize));
       await new Promise<void>((resolve) => setImmediate(resolve));
     }
-    for (let offset = 0; offset < productionExcludedOrders.length; offset += batchSize) {
-      insertProductionOrders(productionExcludedOrders.slice(offset, offset + batchSize));
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
 
     const observationRows = [...observed.entries()];
-    const insertObservations = store.sql.transaction(
-      (batch: (typeof observationRows)[number][]) => {
-        const observation = store.sql.prepare(
-          "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
-        );
-        for (const [key, value] of batch)
-          observation.run(
-            key + ":" + start.slice(0, 10),
-            value.station,
-            value.type,
-            start,
-            JSON.stringify({
-              ...value,
-              generation: id,
-              meaning: "daily_latest_order_snapshot_not_executed_trades",
-            }),
-          );
-      },
-    );
-    for (let offset = 0; offset < observationRows.length; offset += batchSize) {
-      insertObservations(observationRows.slice(offset, offset + batchSize));
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
-    store.sql
-      .prepare(
-        "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
-      )
-      .run(
-        new Date(clock()).toISOString(),
-        first.modified,
-        new Date(expiry).toISOString(),
-        "complete",
-        first.pages,
-        id,
+    const publishGeneration = store.market.transaction(() => {
+      const observation = store.market.prepare(
+        "INSERT INTO station_observations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET at=excluded.at,payload=excluded.payload",
       );
+      for (const [key, value] of observationRows)
+        observation.run(
+          key + ":" + start.slice(0, 10),
+          value.station,
+          value.type,
+          start,
+          JSON.stringify({
+            ...value,
+            generation: id,
+            meaning: "daily_latest_order_snapshot_not_executed_trades",
+          }),
+        );
+      store.market
+        .prepare(
+          "UPDATE market_snapshot_runs SET completed_at=?,modified_at=?,expires_at=?,status=?,pages=? WHERE id=?",
+        )
+        .run(
+          new Date(clock()).toISOString(),
+          first.modified,
+          new Date(expiry).toISOString(),
+          "complete",
+          first.pages,
+          id,
+        );
+    });
+    publishGeneration();
 
     const keep = (
-      store.sql
+      store.market
         .prepare(
           "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 2",
         )
@@ -162,16 +156,13 @@ export async function syncRegion(
     ).map((r) => r.id);
     if (keep.length === 2) {
       try {
-        const obsolete = store.sql
+        const obsolete = store.market
           .prepare(
             "SELECT id FROM market_snapshot_runs WHERE region_id=? AND status='complete' AND id NOT IN (?,?)",
           )
           .all(region, keep[0], keep[1]) as { id: string }[];
-        const deleteBatch = store.sql.prepare(
+        const deleteBatch = store.market.prepare(
           "DELETE FROM market_orders WHERE generation=? AND id IN (SELECT id FROM market_orders WHERE generation=? LIMIT ?)",
-        );
-        const deleteProductionBatch = store.sql.prepare(
-          "DELETE FROM production_market_orders WHERE generation=? AND order_id IN (SELECT order_id FROM production_market_orders WHERE generation=? LIMIT ?)",
         );
         for (const old of obsolete) {
           let deleted: number;
@@ -180,13 +171,7 @@ export async function syncRegion(
             if (deleted)
               await new Promise<void>((resolve) => setImmediate(resolve));
           } while (deleted === batchSize);
-          let deletedProduction: number;
-          do {
-            deletedProduction = deleteProductionBatch.run(old.id, old.id, batchSize).changes;
-            if (deletedProduction)
-              await new Promise<void>((resolve) => setImmediate(resolve));
-          } while (deletedProduction === batchSize);
-          store.sql
+          store.market
             .prepare("DELETE FROM market_snapshot_runs WHERE id=?")
             .run(old.id);
         }
@@ -197,17 +182,12 @@ export async function syncRegion(
     }
     return { id, count: orders.length, expires: expiry };
   } catch (error) {
-    const deleteBatch = store.sql.prepare(
+    const deleteBatch = store.market.prepare(
       "DELETE FROM market_orders WHERE generation=? AND id IN (SELECT id FROM market_orders WHERE generation=? LIMIT 1000)",
     );
     while (deleteBatch.run(id, id).changes === 1000)
       await new Promise<void>((resolve) => setImmediate(resolve));
-    const deleteProductionBatch = store.sql.prepare(
-      "DELETE FROM production_market_orders WHERE generation=? AND order_id IN (SELECT order_id FROM production_market_orders WHERE generation=? LIMIT 1000)",
-    );
-    while (deleteProductionBatch.run(id, id).changes === 1000)
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    store.sql
+    store.market
       .prepare("UPDATE market_snapshot_runs SET status='failed' WHERE id=?")
       .run(id);
     throw error;
@@ -221,7 +201,7 @@ export function latestSnapshots(store: Store, regions: string[]) {
     modifiedAt: string;
   }[] = [];
   for (const region of regions) {
-    const row = store.sql
+    const row = store.market
       .prepare(
         "SELECT id,expires_at,modified_at FROM market_snapshot_runs WHERE region_id=? AND status='complete' ORDER BY completed_at DESC,rowid DESC LIMIT 1",
       )
@@ -248,10 +228,10 @@ export function latestOrders(
   if (locations?.length === 0)
     return { orders, snapshots, complete: snapshots.length === regions.length };
   const statement = locations
-    ? store.sql.prepare(
+    ? store.market.prepare(
         `SELECT payload FROM market_orders WHERE generation=? AND location_id IN (${locations.map(() => "?").join(",")})`,
       )
-    : store.sql.prepare("SELECT payload FROM market_orders WHERE generation=?");
+    : store.market.prepare("SELECT payload FROM market_orders WHERE generation=?");
   for (const row of snapshots)
     for (const o of statement.all(row.id, ...(locations ?? [])) as {
       payload: string;

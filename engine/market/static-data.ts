@@ -354,24 +354,24 @@ export async function downloadSde(): Promise<StaticData> {
   return data;
 }
 export function importStatic(store: Store, data: StaticData) {
-  store.sql.transaction(() => {
+  store.market.transaction(() => {
     // Update rows in place so older deal references remain resolvable.
-    const sys = store.sql.prepare(
+    const sys = store.market.prepare(
       "INSERT INTO systems VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,region_id=excluded.region_id,security=excluded.security",
     );
     for (const s of data.systems) sys.run(s.id, s.name, s.regionId, s.security);
-    store.sql.prepare("DELETE FROM stargates").run();
-    const gate = store.sql.prepare(
+    store.market.prepare("DELETE FROM stargates").run();
+    const gate = store.market.prepare(
       "INSERT OR IGNORE INTO stargates VALUES (?,?)",
     );
     for (const s of data.systems)
       for (const n of s.neighbors) gate.run(s.id, n);
-    const station = store.sql.prepare(
+    const station = store.market.prepare(
       "INSERT INTO stations VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,system_id=excluded.system_id,owner_id=excluded.owner_id,region_id=excluded.region_id",
     );
     for (const s of data.stations)
       station.run(s.id, s.name, s.systemId, s.ownerId, s.regionId);
-    const type = store.sql.prepare(
+    const type = store.market.prepare(
       "INSERT INTO item_types VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,english_name=excluded.english_name,group_id=excluded.group_id,market_group_id=excluded.market_group_id,volume=excluded.volume,payload=excluded.payload",
     );
     for (const t of data.types)
@@ -384,16 +384,22 @@ export function importStatic(store: Store, data: StaticData) {
         t.volume,
         JSON.stringify(t),
       );
-    store.sql
+    const cursorTable = store.market === store.sql
+      ? "sync_cursors"
+      : "market_sync_cursors";
+    store.market
       .prepare(
-        "INSERT INTO sync_cursors VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        `INSERT INTO ${cursorTable} VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
       )
       .run("static", JSON.stringify(data));
   })();
 }
 export function readStatic(store: Store): StaticData | null {
-  const r = store.sql
-    .prepare("SELECT value FROM sync_cursors WHERE key=?")
+  const cursorTable = store.market === store.sql
+    ? "sync_cursors"
+    : "market_sync_cursors";
+  const r = store.market
+    .prepare(`SELECT value FROM ${cursorTable} WHERE key=?`)
     .get("static") as { value: string } | undefined;
   return r ? JSON.parse(r.value) : null;
 }

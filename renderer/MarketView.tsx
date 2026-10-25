@@ -315,8 +315,8 @@ export function MarketView({
                     </small>
                   </span>
                   <span className="caption">
-                    Регион: {o.liquidity.regional?.activeDays ?? 0}/
-                    {o.liquidity.regional?.observedDays ?? 0} активных дней
+                    Регион: {o.liquidity.regional?.activeDays ?? 0} активных ·
+                    {o.liquidity.regional?.observedDays ?? 0}/7 дней с данными
                     <small>
                       Хаб: buy{" "}
                       {money(String(o.liquidity.local?.bidQuantity ?? 0))} ·
@@ -609,7 +609,7 @@ export function MarketView({
                   {preview.liquidity.regional?.medianDailyVolume ??
                     "неизвестна"}
                   , активность {preview.liquidity.regional?.activeDays ?? 0}/
-                  {preview.liquidity.regional?.observedDays ?? 0} дней,
+                  {preview.liquidity.regional?.observedDays ?? 0} дней из 7,
                   обновлена{" "}
                   {preview.liquidity.regional?.newestDate ?? "нет данных"}.
                   Региональный объём не равен обороту станции.
@@ -666,7 +666,7 @@ export function MarketView({
                   </p>
                 </details>
                 <details>
-                  <summary>Региональная история 7 / 30 / 90 дней</summary>
+                  <summary>История региона · 7 завершённых дней UTC</summary>
                   {Object.entries(preview.historyWindows ?? {}).map(
                     ([window, h]) => (
                       <p key={window}>
@@ -677,7 +677,7 @@ export function MarketView({
                             : "90"}{" "}
                         дней:{" "}
                         {h
-                          ? `данные за ${h.observedDays} дней, активность ${h.activeDays}, пропуски ${h.missingDays}, медиана объёма ${h.medianDailyVolume}, цена ${h.medianDailyPrice} ISK, изменение ${h.priceChange === null ? "н/д" : `${(Number(h.priceChange) * 100).toFixed(1)}%`}`
+                          ? `${h.observedDays}/7 дней с данными, ${h.activeDays} активных дней; медианный объём/день ${h.medianDailyVolume}, медианная цена ${h.medianDailyPrice} ISK, взвешенная цена ${h.weightedPrice ?? "н/д"} ISK, диапазон ${h.rangePercent === null ? "н/д" : `${(Number(h.rangePercent) * 100).toFixed(1)}%`}, изменение цены ${h.priceChange === null ? "н/д" : `${(Number(h.priceChange) * 100).toFixed(1)}%`}`
                           : "нет данных"}
                       </p>
                     ),

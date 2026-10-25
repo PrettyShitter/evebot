@@ -7,10 +7,23 @@ import {
   type Vault,
 } from "../../engine/auth/tokens";
 import { createHash } from "node:crypto";
-import { PRODUCTION_SCOPES, OPTIONAL_STRUCTURE_SCOPES } from "../../shared/contracts/app";
-it("requests every required production ESI permission only for the main character", () => {
-  expect(SCOPES.seller).toEqual(expect.arrayContaining([...PRODUCTION_SCOPES, ...OPTIONAL_STRUCTURE_SCOPES]));
-  expect(SCOPES.seller).toHaveLength(new Set(SCOPES.seller).size);
+it("requests only wallet and trading-profile scopes for the seller", () => {
+  expect(SCOPES.seller).toEqual([
+    "esi-wallet.read_character_wallet.v1",
+    "esi-skills.read_skills.v1",
+    "esi-skills.read_skillqueue.v1",
+    "esi-characters.read_standings.v1",
+    "esi-markets.read_character_orders.v1",
+  ]);
+  expect(SCOPES.seller).not.toEqual(
+    expect.arrayContaining([
+      "esi-assets.read_assets.v1",
+      "esi-characters.read_blueprints.v1",
+      "esi-industry.read_character_jobs.v1",
+      "esi-contracts.read_character_contracts.v1",
+      "esi-markets.structure_markets.v1",
+    ]),
+  );
   expect(SCOPES.buyer).toEqual(["esi-wallet.read_character_wallet.v1"]);
 });
 it("PKCE uses cryptographic unique state and S256 of verifier string", () => {

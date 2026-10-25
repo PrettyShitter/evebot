@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-08T05:22:44.001Z",
+  "at": "2026-10-25T04:51:58.771Z",
   "executable": "release/mac-arm64/EVE Trader.app/Contents/MacOS/EVE Trader",
   "platform": "darwin",
   "arch": "arm64",
@@ -9,6 +9,7 @@
     "update health acknowledged after database initialization",
     "packaged worker + native SQLite + migrations + DEMO",
     "settings write",
+    "engine worker responds while window is hidden",
     "hide to tray + show",
     "restart persistence"
   ],

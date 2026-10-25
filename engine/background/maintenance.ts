@@ -36,23 +36,29 @@ export class Alerts {
 }
 export function retain(store: Store, now = Date.now()) {
   const cutoff = new Date(now - 7 * 86400000).toISOString();
-  return store.sql.transaction(() => {
+  const weekStart = new Date(Date.parse(new Date(now).toISOString().slice(0, 10) + "T00:00:00.000Z") - 7 * 86400000)
+    .toISOString()
+    .slice(0, 10);
+  return store.market.transaction(() => {
     // Forecasts contain their own immutable inputs: cached order generations are disposable.
-    const result = store.sql
+    const result = store.market
       .prepare(
         "DELETE FROM market_snapshot_runs WHERE started_at<? AND id NOT IN (SELECT id FROM market_snapshot_runs r WHERE status='complete' AND completed_at=(SELECT max(completed_at) FROM market_snapshot_runs x WHERE x.region_id=r.region_id AND x.status='complete'))",
       )
       .run(cutoff);
-    store.sql
+    store.market
       .prepare("DELETE FROM station_observations WHERE at<?")
-      .run(new Date(now - 90 * 86400000).toISOString());
-    store.sql
+      .run(cutoff);
+    store.market
+      .prepare("DELETE FROM regional_history WHERE date<?")
+      .run(weekStart);
+    store.market
       .prepare("DELETE FROM opportunity_features WHERE available_at<?")
-      .run(new Date(now - 90 * 86400000).toISOString());
-    store.sql
+      .run(cutoff);
+    store.market
       .prepare("DELETE FROM opportunities WHERE at<?")
-      .run(new Date(now - 90 * 86400000).toISOString());
-    store.sql.pragma("optimize");
+      .run(cutoff);
+    store.market.pragma("optimize");
     return result.changes;
   })();
 }
@@ -97,20 +103,20 @@ export function analysisExport(store: Store) {
         .prepare("SELECT * FROM deal_events WHERE deal_id=? ORDER BY at,rowid")
         .all(d.id),
     })),
-    features: store.sql
+    features: store.market
       .prepare("SELECT * FROM opportunity_features ORDER BY available_at")
       .all(),
-    models: store.sql.prepare("SELECT * FROM model_versions").all(),
+    models: store.market.prepare("SELECT * FROM model_versions").all(),
   };
 }
 export function saveFeatures(store: Store, offers: Opportunity[]) {
-  const insert = store.sql.prepare(
+  const insert = store.market.prepare(
     "INSERT OR IGNORE INTO opportunities VALUES (?,?,?)",
   );
-  const features = store.sql.prepare(
+  const features = store.market.prepare(
     "INSERT OR IGNORE INTO opportunity_features VALUES (?,?,?,?,?)",
   );
-  store.sql.transaction(() => {
+  store.market.transaction(() => {
     for (const o of offers) {
       const id = createHash("sha256")
         .update(

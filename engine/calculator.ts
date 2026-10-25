@@ -8,6 +8,7 @@ import { stationProfile, type ProfileData } from "./portfolio/profile";
 import { Portfolio } from "./portfolio/repository";
 import { Trades } from "./portfolio/trades";
 import { DEMO_TIME } from "./market/demo";
+import { completedWeekRange } from "./history/history";
 import {
   changedOrderTypes,
   indexOrderVersions,
@@ -18,11 +19,12 @@ const config = workerData as {
   directory: string;
   migrations: string;
   demo: boolean;
+  marketCachePath?: string;
 };
 const store = new Store(
   join(config.directory, config.demo ? "demo.sqlite" : "portfolio.sqlite"),
   config.migrations,
-  { readonly: true },
+  { readonly: true, ...(config.marketCachePath ? { marketCachePath: config.marketCachePath } : {}) },
 );
 const market = { data: readStatic(store) };
 const portfolio = new Portfolio(store);
@@ -63,6 +65,8 @@ function calculate(prior?: CalculationResult): CalculationResult {
     Object.entries(structural).filter(([key]) => !filters.has(key)),
   );
   const snapshotIds = snapshots.map((s) => s.id);
+  const at = config.demo ? DEMO_TIME : new Date().toISOString();
+  const weekRange = completedWeekRange(at);
   const exposures = [...trades.exposures()];
   const allocationCount = store.sql
     .prepare("SELECT count(*) n FROM sale_allocations")
@@ -70,12 +74,20 @@ function calculate(prior?: CalculationResult): CalculationResult {
   const sellerProfile = store.sql
     .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
     .get();
+  const cursorTable = store.market === store.sql
+    ? "sync_cursors"
+    : "market_sync_cursors";
+  const historyRevision = store.market
+    .prepare(`SELECT value FROM ${cursorTable} WHERE key='history-revision'`)
+    .get();
   const scopeParts = [
     baseSettings,
     budget,
     exposures,
     allocationCount,
     sellerProfile,
+    weekRange,
+    historyRevision,
     market.data.version,
     market.data.stations.map((station) => station.id),
   ];
@@ -94,7 +106,6 @@ function calculate(prior?: CalculationResult): CalculationResult {
   const dirtyTypes = canIncrement
     ? changedOrderTypes(prior.orderVersions, orderVersions)
     : null;
-  const at = config.demo ? DEMO_TIME : new Date().toISOString();
   if (dirtyTypes?.size === 0 && prior) {
     return {
       key,
@@ -118,17 +129,18 @@ function calculate(prior?: CalculationResult): CalculationResult {
     .get() as { value: string } | undefined;
   const profile = raw ? (JSON.parse(raw.value) as ProfileData) : null;
   const reservedDepth = trades.reservedDepth();
-  const since = new Date(Date.parse(at) - 7 * 86400000).toISOString();
+  const since = `${weekRange.start}T00:00:00.000Z`;
+  const until = `${weekRange.end}T00:00:00.000Z`;
   const local = new Map<
     string,
     { observations: number; confirmedSales: number }
   >();
   const stationIds = market.data.stations.map((station) => station.id);
-  for (const row of store.sql
+  for (const row of store.market
     .prepare(
-      `SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<=? AND o.station_id IN (${stationIds.map(() => "?").join(",")}) AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id`,
+      `SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<? AND o.station_id IN (${stationIds.map(() => "?").join(",")}) AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id`,
     )
-    .all(since, at, ...stationIds) as {
+    .all(since, until, ...stationIds) as {
     station_id: string;
     type_id: string;
     n: number;
@@ -139,9 +151,9 @@ function calculate(prior?: CalculationResult): CalculationResult {
     });
   for (const row of store.sql
     .prepare(
-      "SELECT l.type_id,d.destination,sum(a.quantity) n FROM sale_allocations a JOIN purchase_lots l ON l.id=a.lot_id JOIN deals d ON d.id=l.deal_id JOIN wallet_transactions t ON t.character_id=a.seller_id AND t.id=a.transaction_id WHERE json_extract(t.payload,'$.date')>=? AND json_extract(t.payload,'$.date')<=? GROUP BY l.type_id,d.destination",
+      "SELECT l.type_id,d.destination,sum(a.quantity) n FROM sale_allocations a JOIN purchase_lots l ON l.id=a.lot_id JOIN deals d ON d.id=l.deal_id JOIN wallet_transactions t ON t.character_id=a.seller_id AND t.id=a.transaction_id WHERE json_extract(t.payload,'$.date')>=? AND json_extract(t.payload,'$.date')<? GROUP BY l.type_id,d.destination",
     )
-    .all(since, at) as { type_id: string; destination: string; n: number }[]) {
+    .all(since, until) as { type_id: string; destination: string; n: number }[]) {
     const key = row.type_id + ":" + row.destination;
     local.set(key, {
       observations: local.get(key)?.observations ?? 0,
@@ -178,11 +190,11 @@ function calculate(prior?: CalculationResult): CalculationResult {
           : null,
     history: (type, region) =>
       (
-        store.sql
+        store.market
           .prepare(
-            "SELECT payload FROM regional_history WHERE type_id=? AND region_id=?",
+              "SELECT payload FROM regional_history WHERE type_id=? AND region_id=? AND date>=? AND date<? ORDER BY date",
           )
-          .all(type, region) as { payload: string }[]
+          .all(type, region, weekRange.start, weekRange.end) as { payload: string }[]
       ).map((r) => JSON.parse(r.payload) as HistoryDay),
     local: (type, station) =>
       local.get(type + ":" + station) ?? { observations: 0, confirmedSales: 0 },

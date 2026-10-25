@@ -8,6 +8,7 @@ await build({
     preload: "desktop/preload.ts",
     worker: "engine/worker.ts",
     calculator: "engine/calculator.ts",
+    cacheMigrationWorker: "desktop/cache-migration-worker.ts",
   },
   bundle: true,
   platform: "node",

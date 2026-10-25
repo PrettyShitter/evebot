@@ -1,7 +1,7 @@
 import type { HistoryDay } from "../../shared/contracts/esi";
-import { summarize } from "../history/history";
+import { completedWeekRows, summarizeCompletedWeek } from "../history/history";
 import { D, Decimal } from "../accounting/money";
-export const LIQUIDITY_VERSION = "rules-2";
+export const LIQUIDITY_VERSION = "weekly_v1";
 export function liquidity(
   days: HistoryDay[],
   asOf: string,
@@ -17,13 +17,13 @@ export function liquidity(
   },
   targetPrice: string,
 ) {
-  const h = summarize(days, 30, asOf);
-  const newest = days
-    .filter((d) => d.date <= asOf.slice(0, 10))
+  const h = summarizeCompletedWeek(days, asOf);
+  const completedRows = completedWeekRows(days, asOf);
+  const newest = completedRows
     .map((d) => d.date)
     .sort()
     .at(-1);
-  const stale = !newest || Date.parse(asOf) - Date.parse(newest) > 3 * 86400000;
+  const stale = !newest || Date.parse(asOf) - Date.parse(newest + "T00:00:00Z") > 3 * 86400000;
   const ageDays = newest
     ? Math.max(
         0,
@@ -54,7 +54,7 @@ export function liquidity(
     riskFlags.push("Тонкий локальный buy-стакан");
   let sellQuantity = 0;
   if (stale) reasons.push("История устарела");
-  else if (!h || h.observedDays < 7 || h.activeDays < 5)
+  else if (!h || h.observedDays < 5 || h.activeDays < 4)
     reasons.push("Недостаточно истории");
   else if (local.bidQuantity <= 0 && local.confirmedSales <= 0)
     reasons.push("Нет станционных признаков спроса");
@@ -79,11 +79,12 @@ export function liquidity(
     sellQuantity,
     reasons,
     confidence:
-      !sellQuantity || stale || (h?.activeDays ?? 0) < 5
+      !sellQuantity || stale || (h?.activeDays ?? 0) < 4 || (h?.observedDays ?? 0) < 5
         ? "низкая"
         : ageDays !== null &&
             ageDays <= 1 &&
-            (h?.activeDays ?? 0) >= 20 &&
+            h?.observedDays === 7 &&
+            (h?.activeDays ?? 0) >= 6 &&
             local.observations >= 3
           ? "высокая"
           : "средняя",
@@ -96,6 +97,9 @@ export function liquidity(
       medianDailyVolume: h?.medianDailyVolume ?? null,
       medianDailyPrice: h?.medianDailyPrice ?? null,
       priceChange: h?.priceChange ?? null,
+      weeklyVolume: h?.weeklyVolume ?? null,
+      rangePercent: h?.rangePercent ?? null,
+      volumeChange: h?.volumeChange ?? null,
     },
     local: {
       bidQuantity: local.bidQuantity,

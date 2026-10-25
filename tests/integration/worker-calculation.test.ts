@@ -6,12 +6,43 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { Store } from "../../db/store";
 import { seedDemo } from "../../engine/market/demo";
+import { completedWeekRange } from "../../engine/history/history";
 import type { AppState } from "../../shared/contracts/app";
 it("live engine filters ready offers instantly while recalculating structural changes in a worker", async () => {
   mkdirSync(".cache", { recursive: true });
   const dir = mkdtempSync(resolve(".cache/worker-test-"));
   const db = new Store(join(dir, "portfolio.sqlite"), resolve("db/migrations"));
   seedDemo(db);
+  // The worker runs against wall-clock UTC, so move only this isolated fixture
+  // into its active completed week; the packaged demo remains pinned to DEMO_TIME.
+  const range = completedWeekRange(Date.now());
+  const historyPairs = db.sql.prepare(
+    "SELECT DISTINCT type_id,region_id FROM regional_history",
+  ).all() as { type_id: string; region_id: string }[];
+  const historySources = historyPairs.flatMap((pair) => {
+    const source = db.sql.prepare(
+      "SELECT payload,available_at FROM regional_history WHERE type_id=? AND region_id=? ORDER BY date DESC LIMIT 1",
+    ).get(pair.type_id, pair.region_id) as { payload: string; available_at: string } | undefined;
+    return source ? [{ ...pair, ...source }] : [];
+  });
+  const historyInsert = db.sql.prepare(
+    "INSERT INTO regional_history(type_id,region_id,date,payload,available_at) VALUES (?,?,?,?,?)",
+  );
+  db.sql.prepare("DELETE FROM regional_history").run();
+  for (const source of historySources) {
+    const payload = JSON.parse(source.payload) as { date: string };
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(Date.parse(`${range.start}T00:00:00Z`) + day * 86_400_000)
+        .toISOString().slice(0, 10);
+      historyInsert.run(
+        source.type_id,
+        source.region_id,
+        date,
+        JSON.stringify({ ...payload, date }),
+        source.available_at,
+      );
+    }
+  }
   db.sql.prepare("INSERT INTO sync_cursors VALUES ('seller-profile',?)").run(
     JSON.stringify({
       skills: [],
@@ -55,7 +86,14 @@ it("live engine filters ready offers instantly while recalculating structural ch
     const first = await request({ kind: "state" });
     expect(first.market.status).toContain("Расчёт");
     let state = first;
-    for (let i = 0; i < 100 && !state.opportunities.length; i++) {
+    for (
+      let i = 0;
+      i < 100 &&
+      (!state.opportunities.length ||
+        state.market.calculation.total === 0 ||
+        state.market.calculation.busy);
+      i++
+    ) {
       await new Promise((r) => setTimeout(r, 20));
       state = await request({ kind: "state" });
     }
@@ -106,4 +144,4 @@ it("live engine filters ready offers instantly while recalculating structural ch
     await worker.terminate();
     rmSync(dir, { recursive: true, force: true });
   }
-}, 20000);
+}, 30000);

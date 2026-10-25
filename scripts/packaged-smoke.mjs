@@ -97,6 +97,12 @@ try {
     )
   )
     throw Error("Close did not hide to tray");
+  const hiddenState = await page.evaluate(() =>
+    window.eve.request({ kind: "state" }),
+  );
+  if (hiddenState.characters.length !== 3 || !hiddenState.opportunities.length)
+    throw Error("Engine worker stopped responding while the window was hidden");
+  checks.push("engine worker responds while window is hidden");
   console.log("Window is hidden; showing it again");
   await app.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()[0].show(),

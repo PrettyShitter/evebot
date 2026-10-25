@@ -10,11 +10,8 @@ const orderSchema = z.object({
 export function ownSellOrders(store: Store) {
   const rows = store.sql
     .prepare(
-      `SELECT o.id,o.payload,o.available_at,c.name character_name,
-    t.name type_name,s.name station_name FROM character_orders o
+      `SELECT o.id,o.payload,o.available_at,c.name character_name FROM character_orders o
     JOIN characters c ON c.id=o.character_id
-    LEFT JOIN item_types t ON t.id=json_extract(o.payload,'$.type_id')
-    LEFT JOIN stations s ON s.id=json_extract(o.payload,'$.location_id')
     WHERE o.state='active' ORDER BY o.available_at DESC,o.id`,
     )
     .all() as {
@@ -22,9 +19,15 @@ export function ownSellOrders(store: Store) {
     payload: string;
     available_at: string;
     character_name: string;
-    type_name: string | null;
-    station_name: string | null;
   }[];
+  const types = new Map(
+    (store.market.prepare("SELECT id,name FROM item_types").all() as { id: string; name: string }[])
+      .map((row) => [row.id, row.name]),
+  );
+  const stations = new Map(
+    (store.market.prepare("SELECT id,name FROM stations").all() as { id: string; name: string }[])
+      .map((row) => [row.id, row.name]),
+  );
   return rows.flatMap((row) => {
     const parsed = orderSchema.safeParse(JSON.parse(row.payload));
     if (
@@ -38,8 +41,8 @@ export function ownSellOrders(store: Store) {
       {
         id: row.id,
         character: row.character_name,
-        type: row.type_name ?? `Type ${order.type_id}`,
-        station: row.station_name ?? `Location ${order.location_id}`,
+        type: types.get(order.type_id) ?? `Type ${order.type_id}`,
+        station: stations.get(order.location_id) ?? `Location ${order.location_id}`,
         price: order.price,
         remaining: order.volume_remain,
         updatedAt: row.available_at,

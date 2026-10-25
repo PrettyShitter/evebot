@@ -18,7 +18,7 @@ import {
   FORMULA_VERSION,
   type SellerProfile,
 } from "./fees";
-import { summarize } from "../history/history";
+import { summarizeCompletedWeek } from "../history/history";
 import { liquidity } from "../liquidity/model";
 import { excludedMarketTypeIds } from "./classification";
 import type { Settings } from "../../shared/contracts/app";
@@ -40,9 +40,7 @@ export interface Opportunity {
   volume: string | null;
   liquidity: ReturnType<typeof liquidity>;
   historyWindows: {
-    week: ReturnType<typeof summarize>;
-    month: ReturnType<typeof summarize>;
-    quarter: ReturnType<typeof summarize>;
+    week: ReturnType<typeof summarizeCompletedWeek>;
   };
   feeRate: string;
   taxRate: string;
@@ -145,12 +143,9 @@ function autoRankScore(
   liquidity: Opportunity["liquidity"],
   history: Opportunity["historyWindows"],
 ): { score: string; trendAdjustment: number } {
-  const week = history.week?.medianDailyVolume;
-  const month = history.month?.medianDailyVolume;
-  const volumeRatio =
-    week && month && D(month).gt(0) ? D(week).div(month).toNumber() : 1;
-  const volumeTrend = Math.max(0.6, Math.min(1.2, 0.8 + volumeRatio * 0.2));
-  const priceChange = Number(history.month?.priceChange ?? 0);
+  const volumeChange = Number(history.week?.volumeChange ?? 0);
+  const volumeTrend = Math.max(0.6, Math.min(1.2, 1 + volumeChange * 0.2));
+  const priceChange = Number(history.week?.priceChange ?? 0);
   const priceTrend = Math.max(0.75, Math.min(1.1, 1 + priceChange * 0.5));
   const trendAdjustment = Math.round((volumeTrend * priceTrend - 1) * 100);
   const confidence =
@@ -485,9 +480,7 @@ export function scanOpportunities(input: ScanInputs): Opportunity[] {
         const offerLiquidity = { ...l, riskFlags: [...l.riskFlags] };
         if (!windows.has(historyKey))
           windows.set(historyKey, {
-            week: summarize(history, 7, input.at),
-            month: summarize(history, 30, input.at),
-            quarter: summarize(history, 90, input.at),
+            week: summarizeCompletedWeek(history, input.at),
           });
         const sellQ =
           sellPossible && l.sellQuantity

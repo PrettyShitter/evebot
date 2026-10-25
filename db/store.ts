@@ -13,25 +13,37 @@ import { dirname, join } from "node:path";
 import { settings } from "./schema";
 import type { Settings } from "../shared/contracts/app";
 import { DEFAULT_SETTINGS } from "../shared/contracts/app";
+import { openMarketCache } from "./market-cache";
 const CURRENT_SCHEMA_VERSION = 13;
 export class Store {
   readonly sql: Database.Database;
+  readonly market: Database.Database;
   readonly orm;
   constructor(
     readonly path: string,
     migrationPath: string,
-    options: { readonly?: boolean } = {},
+    options: { readonly?: boolean; marketCachePath?: string } = {},
   ) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-    this.sql = new Database(path, options);
+    this.sql = new Database(path, { readonly: options.readonly ?? false });
     this.sql.pragma("foreign_keys = ON");
     if (!options.readonly) this.sql.pragma("journal_mode = WAL");
     this.sql.pragma("busy_timeout = 5000");
     this.orm = drizzle(this.sql);
     const version = Number(this.sql.pragma("user_version", { simple: true }));
     if (options.readonly) {
-      if (version !== CURRENT_SCHEMA_VERSION)
+      if (version !== CURRENT_SCHEMA_VERSION) {
+        this.sql.close();
         throw Error("Database migration required before calculation");
+      }
+      try {
+        this.market = options.marketCachePath
+          ? openMarketCache(options.marketCachePath, true)
+          : this.sql;
+      } catch (error) {
+        this.sql.close();
+        throw error;
+      }
       return;
     }
     try {
@@ -50,6 +62,9 @@ export class Store {
           );
           this.sql.pragma("user_version = " + next);
         })();
+      this.market = options.marketCachePath
+        ? openMarketCache(options.marketCachePath, options.readonly)
+        : this.sql;
     } catch (error) {
       this.sql.close();
       throw error;
@@ -122,6 +137,7 @@ export class Store {
     }
   }
   close() {
+    if (this.market !== this.sql) this.market.close();
     this.sql.close();
   }
 }

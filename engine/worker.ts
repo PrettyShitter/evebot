@@ -43,6 +43,7 @@ import { stationProfile, type ProfileData } from "./portfolio/profile";
 import { transactionSchema, type HistoryDay, type Order } from "../shared/contracts/esi";
 import { Portfolio } from "./portfolio/repository";
 import { shouldStartMarketCalculation } from "./market/calculation-gate";
+import { completedWeekRange } from "./history/history";
 import { ownSellOrders, replaceActiveOrders } from "./portfolio/orders";
 import { journalSchema, type WalletData } from "./portfolio/sync";
 import type {
@@ -62,6 +63,7 @@ const config = workerData as {
   migrations: string;
   resources: string;
   demo: boolean;
+  marketCachePath?: string;
   devBuild?: boolean;
   offline?: boolean;
 };
@@ -69,7 +71,11 @@ const path = join(
   config.directory,
   config.demo ? "demo.sqlite" : "portfolio.sqlite",
 );
-const store = new Store(path, config.migrations);
+const store = new Store(path, config.migrations, {
+  ...(config.marketCachePath && !config.demo
+    ? { marketCachePath: config.marketCachePath }
+    : {}),
+});
 if (config.demo) seedDemo(store);
 const portfolio = new Portfolio(store);
 const market = new MarketService(store, config.resources, config.demo);
@@ -266,6 +272,14 @@ function liveCandidates() {
   const baseSettings = Object.fromEntries(
     Object.entries(structural).filter(([name]) => !filterKeys.has(name)),
   );
+  const at = config.demo ? DEMO_TIME : new Date().toISOString();
+  const weekRange = completedWeekRange(at);
+  const cursorTable = store.market === store.sql
+    ? "sync_cursors"
+    : "market_sync_cursors";
+  const historyRevision = store.market
+    .prepare(`SELECT value FROM ${cursorTable} WHERE key='history-revision'`)
+    .get();
   const key = JSON.stringify([
     snapshots.map((s) => s.id),
     baseSettings,
@@ -275,6 +289,8 @@ function liveCandidates() {
     store.sql
       .prepare("SELECT value FROM sync_cursors WHERE key='seller-profile'")
       .get(),
+    weekRange,
+    historyRevision,
     market.data.version,
     market.data.stations.map((station) => station.id),
   ]);
@@ -461,7 +477,7 @@ function candidates() {
     { observations: number; confirmedSales: number }
   >();
   const hubStationIds = market.data.stations.map((station) => station.id);
-  for (const row of store.sql
+  for (const row of store.market
     .prepare(
       `SELECT o.station_id,o.type_id,count(*) n FROM station_observations o WHERE o.at>=? AND o.at<=? AND o.station_id IN (${hubStationIds.map(() => "?").join(",")}) AND EXISTS (SELECT 1 FROM market_snapshot_runs r WHERE r.id=json_extract(o.payload,'$.generation') AND r.status='complete') GROUP BY o.station_id,o.type_id`,
     )
@@ -512,7 +528,7 @@ function candidates() {
           : null,
     history: (type, region) =>
       (
-        store.sql
+        store.market
           .prepare(
             "SELECT payload FROM regional_history WHERE type_id=? AND region_id=?",
           )
@@ -2701,7 +2717,7 @@ function invalidateReviewState() {
 function invalidateProductionState() {
   stateProductionCache = undefined;
 }
-function state(includeProduction = true): AppState {
+function state(includeProduction = false): AppState {
   const benchmark = process.env.EVE_BENCHMARK === "1";
   const stateStarted = benchmark ? performance.now() : 0;
   const b = portfolio.currentBudget();
@@ -2755,7 +2771,11 @@ function state(includeProduction = true): AppState {
         ? "Расчёт торговых возможностей… Рынок и кошельки доступны."
         : calculationError || market.status,
     },
-    databaseSize: existsSync(path) ? statSync(path).size : 0,
+    databaseSize:
+      (existsSync(path) ? statSync(path).size : 0) +
+      (config.marketCachePath && existsSync(config.marketCachePath)
+        ? statSync(config.marketCachePath).size
+        : 0),
   };
   if (benchmark)
     appendFileSync(
@@ -4350,7 +4370,7 @@ parentPort!.on(
             current.find((x) => x.id === item.id) ??
             cached.find((x) => x.id === item.id) ??
             (() => {
-              const saved = store.sql
+              const saved = store.market
                 .prepare(
                   "SELECT payload FROM opportunities WHERE json_extract(payload,'$.id')=? ORDER BY at DESC LIMIT 1",
                 )
@@ -4562,13 +4582,7 @@ parentPort!.on(
         value: state(
           request.kind === "state"
             ? request.includeProduction !== false
-            : request.kind.startsWith("production.") ||
-                [
-                  "wallet.sync",
-                  "character.connect",
-                  "character.disconnect",
-                  "static.update",
-                ].includes(request.kind),
+            : request.kind.startsWith("production."),
         ),
       });
     } catch (error) {

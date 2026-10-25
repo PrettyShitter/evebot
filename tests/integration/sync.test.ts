@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { Store } from "../../db/store";
 import { resolve } from "node:path";
-import { EsiClient } from "../../engine/esi/client";
+import { EsiClient, SqliteEsiResponseCache } from "../../engine/esi/client";
 import { syncRegion, latestOrders, latestProductionOrders } from "../../engine/market/snapshots";
 import { Scheduler } from "../../engine/esi/scheduler";
 import { summarize } from "../../engine/history/history";
@@ -62,6 +62,30 @@ it("stage 3: atomic generations, failed page leaves previous data intact", async
     s.close();
   }
 });
+it("rolls back station observations when generation publication fails", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  let clock = 0;
+  let version = 1;
+  const client = new EsiClient(async () => new Response(JSON.stringify([order(version)]), {
+    headers: { ETag: `"${version}"`, "X-Pages": "1", "Last-Modified": `Fri, 0${version + 1} Oct 2026 00:00:00 GMT`, "Cache-Control": "max-age=1" },
+  }), () => clock);
+  try {
+    s.market.prepare("INSERT INTO systems VALUES (?,?,?,?)").run("30000142", "test", "1", 0.9);
+    s.market.prepare("INSERT INTO stations VALUES (?,?,?,?,?)").run("60003760", "test station", "30000142", "1", "1");
+    await syncRegion(s, client, "1", () => clock);
+    const oldGeneration = latestOrders(s, ["1"]).snapshots[0]!.id;
+    const oldObservation = s.market.prepare("SELECT payload FROM station_observations").get() as { payload: string };
+    version = 2;
+    clock = 2000;
+    s.market.exec("CREATE TRIGGER reject_observation BEFORE INSERT ON station_observations BEGIN SELECT RAISE(ABORT, 'injected publish failure'); END");
+    await expect(syncRegion(s, client, "1", () => clock)).rejects.toThrow("injected publish failure");
+    expect(latestOrders(s, ["1"]).snapshots[0]!.id).toBe(oldGeneration);
+    expect(latestOrders(s, ["1"]).orders[0]!.order_id).toBe("1");
+    expect(s.market.prepare("SELECT payload FROM station_observations").get()).toEqual(oldObservation);
+  } finally {
+    s.close();
+  }
+});
 it("fetches paginated region orders concurrently in a bounded window", async () => {
   const s = new Store(":memory:", resolve("db/migrations"));
   let active = 0;
@@ -112,8 +136,8 @@ it("omits excluded commodity orders from new snapshots", async () => {
     );
     expect(result.count).toBe(0);
     expect(latestOrders(s, ["1"]).orders).toEqual([]);
-    expect(latestProductionOrders(s, ["1"]).orders).toHaveLength(1);
-    expect(latestProductionOrders(s, ["1"], new Set(["60003761"])).orders).toEqual([]);
+    expect(latestProductionOrders(s, ["1"]).orders).toEqual([]);
+    expect(s.sql.prepare("SELECT count(*) n FROM production_market_orders").get()).toEqual({ n: 0 });
   } finally {
     s.close();
   }
@@ -220,6 +244,35 @@ it("cache expiry, 304 no new content, rate limit retry header", async () => {
   });
   await expect(client.get("/other")).rejects.toMatchObject({ status: 429 });
   expect(calls).toBe(3);
+});
+it("reuses compressed public ESI cache after restart and preserves the last market generation on 304", async () => {
+  const s = new Store(":memory:", resolve("db/migrations"));
+  let now = 0;
+  let calls = 0;
+  try {
+    const fetcher: typeof fetch = async (input, init) => {
+      calls++;
+      if (calls > 1) {
+        expect(new Headers(init?.headers).get("If-None-Match")).toBe('"market-v1"');
+        return new Response(null, { status: 304, headers: { ETag: '"market-v1"', "Cache-Control": "max-age=20", "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT", "X-Pages": "1" } });
+      }
+      return new Response(JSON.stringify([order(77)]), { headers: { ETag: '"market-v1"', "Cache-Control": "max-age=1", "Last-Modified": "Fri, 02 Oct 2026 00:00:00 GMT", "X-Pages": "1" } });
+    };
+    const firstClient = new EsiClient(fetcher, () => now, new SqliteEsiResponseCache(s.market));
+    await syncRegion(s, firstClient, "1", () => now);
+    const before = s.market.prepare("SELECT count(*) n FROM market_snapshot_runs WHERE status='complete'").get() as { n: number };
+    expect(before.n).toBe(1);
+    now = 2000;
+    const restartedClient = new EsiClient(fetcher, () => now, new SqliteEsiResponseCache(s.market));
+    const result = await syncRegion(s, restartedClient, "1", () => now);
+    const after = s.market.prepare("SELECT count(*) n FROM market_snapshot_runs WHERE status='complete'").get() as { n: number };
+    expect(result.unchanged).toBe(true);
+    expect(after.n).toBe(1);
+    expect(latestOrders(s, ["1"]).orders).toHaveLength(1);
+    expect(calls).toBe(2);
+  } finally {
+    s.close();
+  }
 });
 it("scheduler priorities, bounded concurrency, jittered resume and finite retries", async () => {
   let now = 0;

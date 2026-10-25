@@ -15,8 +15,6 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
-    "test:e2e:live": "pnpm build && EVE_LIVE_TEST=1 playwright test tests/e2e/production-live.spec.ts",
-    "test:e2e:packaged:mac": "EVE_PACKAGED_TEST=1 playwright test tests/e2e/production-packaged.spec.ts",
     "verify:stage": "node scripts/verify-stage.mjs",
     "verify:all": "node scripts/verify-stage.mjs all",
     "build": "node scripts/build.mjs",

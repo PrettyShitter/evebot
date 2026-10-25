@@ -52,7 +52,9 @@ it("separates regional history from local depth and flags fragile price books", 
     },
     "130",
   );
-  expect(result.regional.activeDays).toBe(30);
+  expect(result.version).toBe("weekly_v1");
+  expect(result.regional.activeDays).toBe(7);
+  expect(result.regional.observedDays).toBe(7);
   expect(result.local.bidQuantity).toBe(4);
   expect(result.riskFlags).toContain(
     "Цена выше региональной медианы более чем на 25%",
